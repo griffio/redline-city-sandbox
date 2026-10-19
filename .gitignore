@@ -1,6 +1,11 @@
 .env
 node_modules/
 .DS_Store
+
+# build output (scripts/build.mjs) and wrangler's local state
+dist/
+.wrangler/
+.dev.vars*
 __pycache__/
 
 # runtime outputs of the AI endpoints (dev server only)

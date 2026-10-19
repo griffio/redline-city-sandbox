@@ -1,0 +1,17 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "redline-city",
+  "main": "worker/index.js",
+  "compatibility_date": "2026-09-01",
+  // Static site built by scripts/build.mjs. Requests that match a file are served straight from
+  // the edge; everything else (i.e. /api/*) runs the Worker.
+  "assets": { "directory": "./dist", "binding": "ASSETS" },
+  "ai": { "binding": "AI" },
+  // Budgets for AI calls (FLUX.2 and uncached TTS); pre-built voice lines don't count.
+  // Per visitor, and site-wide: the Free plan's daily Workers AI allowance only covers a few images.
+  "ratelimits": [
+    { "name": "AI_LIMIT_IP", "namespace_id": "4401", "simple": { "limit": 3, "period": 60 } },
+    { "name": "AI_LIMIT_SITE", "namespace_id": "4402", "simple": { "limit": 10, "period": 60 } }
+  ],
+  "observability": { "enabled": true }
+}

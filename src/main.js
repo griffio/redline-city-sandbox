@@ -8,6 +8,7 @@ import { Audio } from './audio.js';
 import { UI } from './ui.js';
 import { TouchControls, TOUCH_TUNING } from './touch.js';
 import { buildAtlas, paintCarRegion, paintDetailedCar, renderCarForAI, REGIONS, CAR_COLORS } from './sprites.js';
+import { aiAvailable } from './api.js';
 
 const PHYS_DT = 1 / 240;
 const STORAGE_KEY = 'redline.sandbox.v1';
@@ -31,7 +32,7 @@ class Game {
     this.particles = [];
     this.lastMark = [null, null, null, null];
     this.score = { active: false, points: 0, mult: 1, time: 0, idle: 0, best: 0, total: 0, flash: 0, flashText: '', flashBad: false };
-    this.carLook = { color: CAR_COLORS.Redline, colorName: 'Redline', stripes: true };
+    this.carLook = { color: CAR_COLORS.Redline, colorName: 'Redline', stripes: true, decal: '' };
     this.aiSpriteUrl = null;
     this.scheme = SCHEMES[0];
     this.preset = 'Balanced';
@@ -206,9 +207,19 @@ class Game {
     this.save();
   }
 
+  /** Decal/livery text for the AI pass only: rewrites the prompt, leaves the current sprite alone. */
+  setDecal(decal) {
+    this.carLook.decal = decal;
+    const ta = document.getElementById('aiPrompt');
+    if (ta) ta.value = this.aiPrompt();
+    this.save();
+  }
+
   aiPrompt() {
-    const stripes = this.carLook.stripes ? ' with two white racing stripes down the centre' : '';
-    return `Photorealistic top-down orthographic view of this exact sports car seen from directly above. Keep the exact silhouette, proportions, position and ${this.carLook.colorName.toLowerCase()} paint${stripes}. Add realistic detail: glossy clear-coat reflections, panel gaps and shut lines, detailed headlights and tail lights, tinted glass with soft sky reflections, rear spoiler, side mirrors. Flat light grey background, no shadow, no text.`;
+    const { stripes, colorName, decal } = this.carLook;
+    const stripeText = stripes ? ' with two white racing stripes down the centre' : '';
+    const decalText = decal?.trim() ? ` Apply this livery as decals on the paintwork: ${decal.trim()}.` : '';
+    return `Photorealistic top-down orthographic view of this exact sports car seen from directly above. Keep the exact silhouette, proportions, position and ${colorName.toLowerCase()} paint${stripeText}.${decalText} Add realistic detail: glossy clear-coat reflections, panel gaps and shut lines, detailed headlights and tail lights, tinted glass with soft sky reflections, rear spoiler, side mirrors. Flat light grey background, no shadow, no text.`;
   }
 
   /** Status line for the AI panel; survives panel rebuilds (ui.build reads aiStatusText). */
@@ -223,14 +234,15 @@ class Game {
     this.setAiStatus('Sending sprite to FLUX.2… (~10–20 s)');
     const look = JSON.stringify(this.carLook);
     try {
+      if (!(await aiAvailable())) throw new Error('no AI backend here');
       const png = renderCarForAI(this.carLook).toDataURL('image/png').split(',')[1];
-      const res = await fetch('/api/detail-car', {
+      const res = await fetch('api/detail-car', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ prompt, image: png, width: 512, height: 1024 }),
       });
       const json = await res.json();
-      if (!res.ok) throw new Error(json.error || res.status);
+      if (!res.ok) return this.setAiStatus(`AI detail failed: ${json.error || `HTTP ${res.status}`}`); // the backend explained itself
       // the image is only valid for the paint job it was generated from
       if (JSON.stringify(this.carLook) !== look) {
         this.setAiStatus(`Paint changed while generating, so not applied (saved as ${json.url}).`);
@@ -239,9 +251,9 @@ class Game {
       await this.loadAiSprite(json.url);
       this.aiSpriteUrl = json.url;
       this.save();
-      this.setAiStatus(`Done → ${json.url}`);
+      this.setAiStatus(json.url.startsWith('data:') ? 'Done: AI-detailed sprite applied.' : `Done → ${json.url}`);
     } catch (e) {
-      this.setAiStatus(`AI detail failed: ${e.message || e}. (Is the dev server running? npm start)`);
+      this.setAiStatus(`AI detail failed: ${e.message || e}. (Needs the dev server, npm start, or the Cloudflare deploy.)`);
     } finally {
       this.aiBusy = false;
     }

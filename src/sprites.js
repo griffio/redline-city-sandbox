@@ -34,6 +34,17 @@ export const CAR_COLORS = {
   'Pearl White': '#e9e9e4',
 };
 
+// Livery ideas for the AI pass (the text is what goes into the prompt). No real brands or logos.
+export const DECAL_PRESETS = {
+  None: '',
+  Flames: 'hot-rod flame decals in orange and yellow sweeping back from the front of the hood and along both sides',
+  'Race number': 'a large white racing roundel with the black number 77 on the roof and on both doors',
+  'Carbon hood': 'a matte black carbon-fibre hood and roof with a visible weave',
+  Checkered: 'a black-and-white checkered flag pattern across the roof and rear deck',
+  'Touring livery': 'a touring-car livery with bold blue and yellow stripes and small generic sponsor-style panels (no real brands or text)',
+  'Drift style': 'a Japanese drift-car livery with pink and white cherry-blossom graphics sweeping along the sides',
+};
+
 const shade = (hex, f) => {
   const n = parseInt(hex.slice(1), 16);
   let r = (n >> 16) & 255, g = (n >> 8) & 255, b = n & 255;

@@ -98,6 +98,7 @@ function overBudget() {
 
 async function handleApi(req, res, url) {
   if (!CF_ACCOUNT || !CF_TOKEN) return send(res, 500, { error: 'Cloudflare credentials missing from .env' });
+  if (url.pathname === '/api/health') return send(res, 200, { ok: true });
   const cachedVoice = url.pathname === '/api/voice'; // cache hits are free; checked again below
   if (!cachedVoice && overBudget()) return send(res, 429, { error: 'AI request budget exceeded, try again in a minute' });
 
@@ -111,7 +112,7 @@ async function handleApi(req, res, url) {
     const name = `car-${Date.now()}.jpg`;
     await fs.writeFile(path.join(dir, name), out);
     await fs.writeFile(path.join(dir, 'car-latest.jpg'), out);
-    return send(res, 200, { url: `/assets/generated/${name}` });
+    return send(res, 200, { url: `assets/generated/${name}` }); // relative: works under a subpath too
   }
 
   // POST /api/image {prompt, width, height} -> generated texture saved under assets/generated

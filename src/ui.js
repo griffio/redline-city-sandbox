@@ -3,7 +3,8 @@ import { DEFAULT_TUNING, PRESETS } from './physics/car.js';
 import { SCHEMES, CAMERA_MODES, CONTROL_TUNING } from './controls.js';
 import { CAMERA_TUNING } from './camera.js';
 import { INPUT_TUNING } from './input.js';
-import { CAR_COLORS } from './sprites.js';
+import { CAR_COLORS, DECAL_PRESETS } from './sprites.js';
+import { aiAvailable } from './api.js';
 import { TOUCH_TUNING } from './touch.js';
 
 const $ = (sel, root = document) => root.querySelector(sel);
@@ -178,8 +179,17 @@ export class UI {
     // car look + AI
     const colorSel = h('select', { onchange: (e) => g.setCarLook({ color: CAR_COLORS[e.target.value], colorName: e.target.value }) },
       Object.keys(CAR_COLORS).map((n) => h('option', { value: n, ...(g.carLook.colorName === n ? { selected: '' } : {}) }, n)));
+    const decal = h('input', {
+      type: 'text', placeholder: 'Describe a decal or livery, e.g. "gold pinstripes"',
+      oninput: (e) => g.setDecal(e.target.value),
+    });
+    decal.value = g.carLook.decal || '';
+    const decalSel = h('select', { onchange: (e) => { decal.value = DECAL_PRESETS[e.target.value]; g.setDecal(decal.value); } },
+      Object.entries(DECAL_PRESETS).map(([n, text]) =>
+        h('option', { value: n, ...((g.carLook.decal || '') === text ? { selected: '' } : {}) }, n)));
     const prompt = h('textarea', { rows: 5, id: 'aiPrompt' });
     prompt.value = g.aiPrompt();
+    const detailBtn = h('button', { onclick: () => g.detailCarWithAI(prompt.value) }, '✨ Detail car with AI');
     this.aiStatus = h('div', { class: 'ai-status' },
       g.aiStatusText || (g.aiSpriteUrl ? 'Using AI-detailed sprite.' : 'Using software-rendered sprite.'));
     p.append(h('details', { class: 'group', open: '' },
@@ -188,14 +198,21 @@ export class UI {
         h('label', {}, 'Paint', colorSel),
         this.check('Racing stripes', g.carLook.stripes, (v) => g.setCarLook({ stripes: v })),
       ),
-      h('p', { class: 'hint' }, 'Sends the software-rendered car to FLUX.2 (Cloudflare Workers AI) as a reference image, then clips the result back to the exact silhouette.'),
+      h('label', { class: 'decal' }, 'Decal / livery (AI)', h('div', { class: 'row2' }, decalSel, decal)),
+      h('p', { class: 'hint' }, 'Sends the software-rendered car to FLUX.2 (Cloudflare Workers AI) as a reference image with this prompt, then clips the result back to the exact silhouette. Editing the decal rewrites the prompt.'),
       prompt,
       h('div', { class: 'btns' },
-        h('button', { onclick: () => g.detailCarWithAI(prompt.value) }, '✨ Detail car with AI'),
+        detailBtn,
         h('button', { onclick: () => g.useProceduralSprite() }, 'Use procedural sprite'),
       ),
       this.aiStatus,
     ));
+    aiAvailable().then((ok) => {
+      if (ok) return;
+      detailBtn.disabled = true;
+      detailBtn.title = 'Needs the dev server (npm start) or the Cloudflare deploy';
+      if (!g.aiStatusText) this.aiStatus.textContent = 'AI is unavailable on this host (static hosting): needs the dev server or the Cloudflare deploy.';
+    });
 
     p.append(h('div', { class: 'btns' },
       h('button', { onclick: () => g.resetCar() }, 'Reset car (R / Y)'),

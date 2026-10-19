@@ -3,11 +3,17 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "Top-down WebGPU arcade driving game — handling sandbox",
+  "description": "Top-down WebGPU arcade driving game \u2014 handling sandbox",
   "scripts": {
-    "start": "node server.mjs"
+    "start": "node server.mjs",
+    "build": "node scripts/build.mjs",
+    "dev:cf": "npm run build && CLOUDFLARE_LOAD_DEV_VARS_FROM_DOT_ENV=false wrangler dev",
+    "deploy": "npm run build && wrangler deploy"
   },
   "engines": {
     "node": ">=20"
+  },
+  "devDependencies": {
+    "wrangler": "^4.151.2"
   }
 }

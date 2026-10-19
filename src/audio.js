@@ -4,13 +4,13 @@
 // Engine: two buses (on-load / off-load) blended by throttle. Each bus is a stack of seamless
 // RPM loops; the two neighbours of the current RPM are equal-power crossfaded in log-RPM and
 // each is pitch-corrected with playbackRate = rpm / loopRpm, so the pitch is always exact.
-// The announcer uses Deepgram Aura TTS via the dev server (/api/voice), cached to assets/voice/.
+// The announcer uses Deepgram Aura TTS via /api/voice (dev server or Cloudflare Worker).
 
 const clamp = (v, lo, hi) => (v < lo ? lo : v > hi ? hi : v);
 const AUDIO_ROOT = 'assets/audio/';
+import { aiAvailable } from './api.js';
+
 const SMOOTH = 0.03; // seconds, gain/rate smoothing
-// The announcer's TTS comes from the local dev server (npm start); static hosts like GitHub Pages have no /api.
-const HAS_DEV_API = ['localhost', '127.0.0.1', '[::1]'].includes(location.hostname);
 
 export class Audio {
   constructor() {
@@ -327,9 +327,9 @@ export class Audio {
 
   /** Fetch + cache a TTS line from the dev server. Fails silently (e.g. static hosting). */
   async loadVoice(text) {
-    if (!HAS_DEV_API) return null;
     if (!this.ctx || this.voices.has(text)) return this.voices.get(text);
-    const p = fetch(`/api/voice?text=${encodeURIComponent(text)}`)
+    const p = aiAvailable()
+      .then((ok) => (ok ? fetch(`api/voice?text=${encodeURIComponent(text)}`) : Promise.reject(new Error('no AI backend'))))
       .then((r) => (r.ok ? r.arrayBuffer() : Promise.reject(r.status)))
       .then((b) => this.ctx.decodeAudioData(b))
       .catch(() => null);
