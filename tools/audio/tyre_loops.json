@@ -1,0 +1,5 @@
+[
+ {"src": "sources/71739.mp3", "t0": 2.5, "t1": 13.9, "name": "tyre_squeal", "kind": "squeal", "track": false, "xfade": 0.4, "hp": 300, "db": -16},
+ {"src": "sources/71740.mp3", "t0": 3.1, "t1": 5.65, "name": "tyre_spin", "kind": "spin", "track": false, "xfade": 0.3, "hp": 220, "db": -16},
+ {"src": "sources/76804.mp3", "t0": 7.52, "t1": 9.75, "name": "tyre_handbrake", "kind": "oneshot", "track": false, "hp": 250, "fadeOut": 0.5, "db": -15}
+]

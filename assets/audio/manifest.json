@@ -1,0 +1,61 @@
+{
+ "engine": {
+  "idle": {
+   "file": "engine/v8_idle.wav",
+   "rpm": 800
+  },
+  "on": [
+   {
+    "file": "engine/v8_on_2860.wav",
+    "rpm": 2860
+   },
+   {
+    "file": "engine/v8_on_3130.wav",
+    "rpm": 3139
+   },
+   {
+    "file": "engine/v8_on_4300.wav",
+    "rpm": 4344
+   },
+   {
+    "file": "engine/v8_on_4800.wav",
+    "rpm": 4784
+   },
+   {
+    "file": "engine/v8_on_5300.wav",
+    "rpm": 5256
+   },
+   {
+    "file": "engine/v8_on_5800.wav",
+    "rpm": 5710
+   },
+   {
+    "file": "engine/v8_on_6300.wav",
+    "rpm": 6230
+   },
+   {
+    "file": "engine/v8_on_6750.wav",
+    "rpm": 6688
+   },
+   {
+    "file": "engine/v8_on_7100.wav",
+    "rpm": 7017
+   }
+  ],
+  "off": [
+   {
+    "file": "engine/v8_off_6200.wav",
+    "rpm": 6298
+   },
+   {
+    "file": "engine/v8_off_5600.wav",
+    "rpm": 5594
+   }
+  ]
+ },
+ "tyres": {
+  "squeal": "tyres/tyre_squeal.wav",
+  "spin": "tyres/tyre_spin.wav",
+  "handbrake": "tyres/tyre_handbrake.wav"
+ }
+}

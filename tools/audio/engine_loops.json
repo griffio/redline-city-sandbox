@@ -1,0 +1,14 @@
+[
+ {"src": "sources/157142.mp3", "t0": 0.15, "t1": 3.75, "name": "v8_idle", "kind": "idle", "rpm": 800, "track": false, "xfade": 0.25},
+ {"src": "sources/157144.mp3", "t0": 0.4, "t1": 2.4, "name": "v8_on_2860", "kind": "on", "lo": 18, "hi": 30},
+ {"src": "sources/213665.mp3", "t0": 0.3, "t1": 1.15, "name": "v8_on_3130", "kind": "on"},
+ {"src": "sources/213665.mp3", "t0": 3.1, "t1": 4.1, "name": "v8_on_4300", "kind": "on"},
+ {"src": "sources/213665.mp3", "t0": 4.9, "t1": 5.9, "name": "v8_on_4800", "kind": "on"},
+ {"src": "sources/213665.mp3", "t0": 6.7, "t1": 7.7, "name": "v8_on_5300", "kind": "on"},
+ {"src": "sources/213665.mp3", "t0": 8.4, "t1": 9.4, "name": "v8_on_5800", "kind": "on"},
+ {"src": "sources/213665.mp3", "t0": 10.0, "t1": 11.0, "name": "v8_on_6300", "kind": "on"},
+ {"src": "sources/213665.mp3", "t0": 11.6, "t1": 12.6, "name": "v8_on_6750", "kind": "on"},
+ {"src": "sources/213665.mp3", "t0": 12.6, "t1": 13.5, "name": "v8_on_7100", "kind": "on"},
+ {"src": "sources/213665.mp3", "t0": 13.75, "t1": 14.35, "name": "v8_off_6200", "kind": "off"},
+ {"src": "sources/213665.mp3", "t0": 14.3, "t1": 14.95, "name": "v8_off_5600", "kind": "off"}
+]

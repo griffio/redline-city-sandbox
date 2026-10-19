@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Redline City — Sandbox</title>
+  <link rel="stylesheet" href="style.css" />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🏁</text></svg>" />
+</head>
+<body>
+  <canvas id="gpu"></canvas>
+  <div id="vignette"></div>
+
+  <header id="title">
+    <h1>REDLINE <span>CITY</span></h1>
+    <div class="sub">handling sandbox</div>
+    <div id="best"></div>
+    <div id="perf"></div>
+  </header>
+
+  <div id="banner"></div>
+  <div id="toast"></div>
+
+  <div id="hud"></div>
+  <canvas id="tele" width="230" height="140"></canvas>
+
+  <aside id="help">
+    <b>Keyboard</b>
+    <div><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> / arrows · drive</div>
+    <div><kbd>Space</kbd> handbrake · <kbd>Shift</kbd> drift</div>
+    <div><kbd>S</kbd> at a stop = reverse · <kbd>X</kbd> brake (point mode)</div>
+    <div><kbd>1</kbd>–<kbd>5</kbd> scheme · <kbd>C</kbd> camera · <kbd>P</kbd> preset</div>
+    <div><kbd>R</kbd> reset · <kbd>K</kbd> clear skids · <kbd>M</kbd> mute · <kbd>Tab</kbd> panel · <kbd>H</kbd> help · <kbd>F</kbd> perf</div>
+    <b>Controller</b>
+    <div>LS steer · RT throttle · LT brake/reverse</div>
+    <div>A handbrake · B/RB drift · X brake</div>
+    <div>Y reset · LB camera · View scheme · D-pad ◀▶ preset · Menu panel</div>
+  </aside>
+
+  <aside id="panel"></aside>
+
+  <div id="start">Click or press a key to start the engine 🔊<small>Browsers only unlock sound from a click or key, so controller players need to click once.</small></div>
+  <div id="error" class="hidden"></div>
+
+  <script type="module" src="src/main.js"></script>
+</body>
+</html>

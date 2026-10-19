@@ -1,0 +1,13 @@
+{
+  "name": "redline-city",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Top-down WebGPU arcade driving game — handling sandbox",
+  "scripts": {
+    "start": "node server.mjs"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
