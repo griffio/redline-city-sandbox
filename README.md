@@ -19,6 +19,14 @@ Needs a WebGPU browser (Chrome/Edge 113+, Safari 26+, Firefox 141+). The server 
 * **AI call limit:** AI calls are capped at 20 per minute; cached voice lines don't count.
 * **Hidden files:** dotfiles and dot-directories (`.env`, `.git/…`) are never served.
 
+### GitHub Pages
+
+`.github/workflows/pages.yml` publishes the game on every push to `main`, and can also be run by hand from the Actions tab. To enable it, go to **Settings → Pages → Build and deployment → Source** and choose **GitHub Actions**.
+
+* **What's published:** only what the browser loads: `index.html`, `style.css`, `src/` and `assets/`. There's no build step.
+* **What stays local:** the dev server, Python tools and docs are not published.
+* **Without the dev server:** the Pages build has everything except the two dev-server AI features. The announcer is skipped, and *Detail car with AI* reports that it needs `npm start`.
+
 ## Layout
 
 | file | what |

@@ -9,6 +9,8 @@
 const clamp = (v, lo, hi) => (v < lo ? lo : v > hi ? hi : v);
 const AUDIO_ROOT = 'assets/audio/';
 const SMOOTH = 0.03; // seconds, gain/rate smoothing
+// The announcer's TTS comes from the local dev server (npm start); static hosts like GitHub Pages have no /api.
+const HAS_DEV_API = ['localhost', '127.0.0.1', '[::1]'].includes(location.hostname);
 
 export class Audio {
   constructor() {
@@ -325,6 +327,7 @@ export class Audio {
 
   /** Fetch + cache a TTS line from the dev server. Fails silently (e.g. static hosting). */
   async loadVoice(text) {
+    if (!HAS_DEV_API) return null;
     if (!this.ctx || this.voices.has(text)) return this.voices.get(text);
     const p = fetch(`/api/voice?text=${encodeURIComponent(text)}`)
       .then((r) => (r.ok ? r.arrayBuffer() : Promise.reject(r.status)))
