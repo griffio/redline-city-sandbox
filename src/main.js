@@ -6,6 +6,7 @@ import { SCHEMES, CONTROL_TUNING } from './controls.js';
 import { Camera, CAMERA_TUNING } from './camera.js';
 import { Audio } from './audio.js';
 import { UI } from './ui.js';
+import { TouchControls, TOUCH_TUNING } from './touch.js';
 import { buildAtlas, paintCarRegion, paintDetailedCar, renderCarForAI, REGIONS, CAR_COLORS } from './sprites.js';
 
 const PHYS_DT = 1 / 240;
@@ -46,18 +47,42 @@ class Game {
     this.renderer.uploadAtlas(this.atlas);
     if (this.aiSpriteUrl) this.loadAiSprite(this.aiSpriteUrl).catch(() => { this.aiSpriteUrl = null; });
 
+    this.touch = new TouchControls({
+      onReset: () => this.resetCar(),
+      onPanel: () => document.body.classList.toggle('panel-hidden'),
+      onToast: (t) => this.toast(t),
+    });
+    this.input.touch = this.touch;
+    if (this.touch.enabled) document.body.classList.add('panel-hidden', 'help-hidden');
     this.ui = new UI(this);
     this.resetCar();
     this.input.onPadChange = (id, on) => this.toast(on ? `🎮 ${id.split('(')[0].trim()} connected` : 'Controller disconnected');
 
-    const startAudio = () => {
+    // Audio (and on tablets the motion sensors) unlock only from a user gesture, and iOS only counts
+    // touchend/click, so keep trying on every gesture; start()/resume() are no-ops once running.
+    const unlock = () => {
       this.audio.start();
       this.audio.resume();
-      for (const line of ['Nice drift!', 'Great drift!', 'Insane drift!', 'Mini turbo!', 'Wrecked!']) this.audio.loadVoice(line);
-      document.getElementById('start').classList.add('hidden');
+      if (!this.voicesRequested) {
+        this.voicesRequested = true;
+        for (const line of ['Nice drift!', 'Great drift!', 'Insane drift!', 'Mini turbo!', 'Wrecked!']) this.audio.loadVoice(line);
+      }
     };
-    addEventListener('keydown', startAudio, { once: true });
-    addEventListener('pointerdown', startAudio, { once: true });
+    for (const ev of ['keydown', 'pointerdown', 'touchend', 'click']) addEventListener(ev, unlock, { passive: true });
+    const start = document.getElementById('start');
+    if (this.touch.enabled) {
+      start.classList.add('tap');
+      start.innerHTML = '<b>Tap to start</b><small>Hold the iPad like a steering wheel: tilt to steer, thumbs on the pedals. It calibrates to however you are holding it when you tap.</small>';
+      start.addEventListener('click', () => {
+        unlock();
+        start.classList.add('hidden');
+        this.touch.begin(); // must start inside the tap: iOS asks for motion permission here
+      });
+    } else {
+      const hide = () => start.classList.add('hidden');
+      addEventListener('keydown', hide, { once: true });
+      addEventListener('pointerdown', hide, { once: true });
+    }
 
     this.last = performance.now();
     this.acc = 0;
@@ -88,6 +113,7 @@ class Game {
     return {
       scheme: this.scheme.id, preset: this.preset, model: this.car.model,
       car: { ...this.car.t }, input: { ...INPUT_TUNING }, camera: { ...CAMERA_TUNING }, control: { ...CONTROL_TUNING },
+      touch: { ...TOUCH_TUNING },
       look: this.carLook, aiSpriteUrl: this.aiSpriteUrl,
       sound: this.audio.enabled, voice: this.audio.voiceEnabled, best: this.score.best, resolution: this.perf.mode,
     };
@@ -101,6 +127,7 @@ class Game {
     Object.assign(INPUT_TUNING, s.input || {});
     Object.assign(CAMERA_TUNING, s.camera || {});
     Object.assign(CONTROL_TUNING, s.control || {});
+    Object.assign(TOUCH_TUNING, s.touch || {});
     if (s.look) Object.assign(this.carLook, s.look);
     this.aiSpriteUrl = s.aiSpriteUrl || null;
     this.audio.enabled = s.sound ?? true;

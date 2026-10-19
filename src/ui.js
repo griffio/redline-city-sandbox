@@ -4,6 +4,7 @@ import { SCHEMES, CAMERA_MODES, CONTROL_TUNING } from './controls.js';
 import { CAMERA_TUNING } from './camera.js';
 import { INPUT_TUNING } from './input.js';
 import { CAR_COLORS } from './sprites.js';
+import { TOUCH_TUNING } from './touch.js';
 
 const $ = (sel, root = document) => root.querySelector(sel);
 const h = (tag, attrs = {}, ...kids) => {
@@ -66,6 +67,15 @@ const INPUT_SLIDERS = [
 const POINT_SLIDERS = [
   ['pointGain', 'Point-to-steer gain', 0.5, 6, 0.1],
   ['pointDamping', 'Point-to-steer damping', 0, 0.6, 0.01],
+];
+const TOUCH_SLIDERS = [
+  ['tiltMaxDeg', 'Tilt for full lock °', 10, 60, 1, 'How far to rotate the device for full steering'],
+  ['tiltDeadzoneDeg', 'Tilt dead zone °', 0, 8, 0.5],
+  ['tiltCurve', 'Tilt response curve', 1, 2.5, 0.05, '>1 = finer control near centre'],
+  ['smoothing', 'Sensor smoothing', 0, 1, 0.05, 'Higher = steadier but laggier'],
+  ['pitchRangeDeg', 'Full tilt: pitch for full pedal °', 5, 35, 1],
+  ['pitchDeadzoneDeg', 'Full tilt: pitch dead zone °', 0, 12, 0.5],
+  ['jerkSensitivity', 'Jerk handbrake sensitivity', 0, 1, 0.05, 'Higher = a gentler flick triggers it'],
 ];
 const CAMERA_SLIDERS = [
   ['rotStiffness', 'Rotation stiffness', 0.3, 10, 0.1],
@@ -163,6 +173,7 @@ export class UI {
     p.append(this.group('Input', INPUT_SLIDERS, INPUT_TUNING));
     p.append(this.group('Point-to-steer', POINT_SLIDERS, CONTROL_TUNING));
     p.append(this.group('Camera', CAMERA_SLIDERS, CAMERA_TUNING));
+    p.append(this.touchGroup());
 
     // car look + AI
     const colorSel = h('select', { onchange: (e) => g.setCarLook({ color: CAR_COLORS[e.target.value], colorName: e.target.value }) },
@@ -193,6 +204,29 @@ export class UI {
       h('button', { onclick: () => { navigator.clipboard?.writeText(JSON.stringify(g.snapshot(), null, 2)); } }, 'Copy tuning JSON'),
       h('button', { onclick: () => g.applyPreset(g.preset) }, 'Reset sliders to preset'),
     ));
+  }
+
+  touchGroup() {
+    const g = this.game;
+    const sel = (key, options) => h('select', {
+      onchange: (e) => { TOUCH_TUNING[key] = e.target.value; g.touch.applyUi(); g.save(); },
+    }, options.map(([k, v]) => h('option', { value: k, ...(TOUCH_TUNING[key] === k ? { selected: '' } : {}) }, v)));
+    const group = this.group('Touch & tilt', TOUCH_SLIDERS, TOUCH_TUNING);
+    group.insertBefore(h('div', {},
+      h('div', { class: 'row2' },
+        h('label', {}, 'On-screen controls', sel('ui', [['auto', 'Auto (touch devices)'], ['on', 'On'], ['off', 'Off']])),
+        h('label', {}, 'Mode', sel('mode', [['tilt', 'Tilt steer + pedals'], ['fulltilt', 'Full tilt (pitch = gas/brake)'], ['touch', 'Touch buttons only']])),
+      ),
+      h('div', { class: 'checks' },
+        this.check('Jerk back = handbrake', TOUCH_TUNING.jerkHandbrake, (v) => { TOUCH_TUNING.jerkHandbrake = v; }),
+        this.check('Invert steering', TOUCH_TUNING.invertSteer, (v) => { TOUCH_TUNING.invertSteer = v; }),
+      ),
+      h('div', { class: 'btns' },
+        h('button', { onclick: () => g.touch.enableTilt() }, 'Enable motion sensors'),
+        h('button', { onclick: () => g.touch.recentre('Tilt recentred') }, 'Recentre tilt'),
+      ),
+    ), group.children[1]);
+    return group;
   }
 
   check(label, value, set) {

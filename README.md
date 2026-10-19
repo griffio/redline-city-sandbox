@@ -35,6 +35,7 @@ Needs a WebGPU browser (Chrome/Edge 113+, Safari 26+, Firefox 141+). The server 
 | `src/physics/world.js` | Sandbox layout, SAT car-vs-barrier, impulse collisions with cones/tyres |
 | `src/controls.js` | The 5 control schemes (input → car commands) |
 | `src/input.js` | Keyboard ramps, radial deadzone + response curve, Gamepad API, dual-motor rumble |
+| `src/touch.js` | Tablet controls: tilt steering, touch pedals, full-tilt and jerk-handbrake modes |
 | `src/camera.js` | Chase / locked / north-up camera, look-ahead, speed zoom, shake |
 | `src/gpu/renderer.js` | WebGPU: procedural ground shader, persistent skid-mark render target, instanced sprites |
 | `src/sprites.js` | Canvas 2D (software) sprite atlas + AI detail pipeline |
@@ -70,6 +71,29 @@ Needs a WebGPU browser (Chrome/Edge 113+, Safari 26+, Firefox 141+). The server 
 Handling presets: Balanced, Grip / Sim, Drift Car, Arcade Grip, Ice / Rally. Every setting persists in localStorage; *Copy tuning JSON* in the panel exports a config to bake into defaults.
 
 ![Kart-style drift at 139 km/h with a level-3 purple mini-turbo charging; the tuning panel shows the control-scheme cards, presets and slider groups](docs/screenshots/tuning-panel.jpg)
+
+## iPad / tablet controls
+
+On touch devices, on-screen controls switch on automatically. Tap **Tap to start** to grant motion-sensor access (iOS asks here), unlock sound, and calibrate to however you're holding the device.
+
+| Action | Control |
+|---|---|
+| Steer | Rotate the iPad like a steering wheel. Full lock is ±28° by default. |
+| Gas / brake | Right / left thumb pedals. Slide up a pedal for more. |
+| Handbrake / drift | Buttons above the pedals. |
+| ⟲ ↺ ⚙ | Recentre tilt, reset car, settings panel (top right). |
+
+* **Modes** (panel → *Touch & tilt*):
+  * **Tilt steer + pedals** (default).
+  * **Full tilt:** tilt the top edge away to accelerate and pull it back to brake, with a dead zone and range around the calibrated angle.
+  * **Touch buttons only:** ◀ ▶ arrows replace tilt steering.
+* **Jerk back = handbrake** is optional. It detects a fast pull of the top edge toward you, at sensor rate. Steering holds its pre-flick value so the yank doesn't jerk the wheel.
+* **Robustness:**
+  * Steering is the rotation of gravity within the screen's plane relative to the calibrated neutral. That makes it independent of landscape direction, of how far back the device is tilted, and of iOS/Android sign conventions.
+  * It fades out when the device lies flat, and recentres automatically when the device is turned round.
+* **Fallbacks:** without a motion sensor, or if access is denied, ◀ ▶ arrows appear for steering. Bluetooth controllers and keyboards keep working.
+* **HTTPS is required for motion sensors.** GitHub Pages works as-is. For the local dev server, use an HTTPS tunnel. Be aware a tunnel also exposes the `/api` routes, which are rate-limited.
+* **Full screen:** *Add to Home Screen* in Safari runs it full-screen.
 
 ## AI assets (Cloudflare Workers AI)
 

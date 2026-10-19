@@ -66,6 +66,7 @@ export const SCHEMES = [
     model: 'physics',
     preset: 'Arcade Grip',
     map: (raw, car, cam) => {
+      if (raw.source === 'touch') return carRelative(raw); // tilt steering is already car-relative
       if (raw.stickMag < 0.25) {
         return { steer: 0, throttle: raw.throttle, brake: raw.altBrake, handbrake: raw.handbrake, drift: false };
       }

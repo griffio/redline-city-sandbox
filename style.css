@@ -124,7 +124,7 @@ input[type='range'] { width: 100%; accent-color: var(--accent); }
   position: fixed; left: calc((100% - var(--panel-w)) / 2); bottom: 40%; transform: translateX(-50%); background: var(--panel); border: 1px solid var(--accent);
   padding: 12px 18px; border-radius: 10px; font-weight: 600; pointer-events: none; transition: opacity 0.3s;
 }
-#start.hidden { opacity: 0; }
+#start.hidden { opacity: 0; pointer-events: none; }
 #start small { display: block; margin-top: 4px; font-weight: 400; font-size: 11px; color: var(--muted); }
 #error {
   position: fixed; inset: 30% 20% auto; background: #2a0d10; border: 1px solid var(--accent); padding: 20px; border-radius: 10px; font-size: 15px;
@@ -136,3 +136,65 @@ input[type='range'] { width: 100%; accent-color: var(--accent); }
 }
 
 body.panel-hidden #banner, body.panel-hidden #toast, body.panel-hidden #start { left: 50%; }
+
+/* ---------- touch / tilt (tablets) ---------- */
+:root {
+  --sl: max(18px, env(safe-area-inset-left));
+  --sr: max(18px, env(safe-area-inset-right));
+  --sb: max(18px, env(safe-area-inset-bottom));
+}
+body.touch { touch-action: none; overscroll-behavior: none; -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
+body.touch #panel { touch-action: pan-y; -webkit-user-select: auto; user-select: auto; }
+#touch { display: none; position: fixed; inset: 0; pointer-events: none; }
+body.touch #touch { display: block; }
+body.touch:not(.panel-hidden) #touch { right: var(--panel-w); }
+#touch > div, #touch button { pointer-events: auto; }
+#tiltinfo { margin-top: 2px; font: 11px ui-monospace, monospace; color: #6f7680; }
+body.perf-hidden #tiltinfo { display: none; }
+
+.tc-pedal, .tc-btn {
+  position: absolute; display: flex; align-items: flex-end; justify-content: center; overflow: hidden;
+  border-radius: 22px; background: rgba(14, 16, 20, 0.5); border: 2px solid rgba(255, 255, 255, 0.16);
+  backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px); touch-action: none;
+  color: rgba(255, 255, 255, 0.82); font: 700 13px/1.15 ui-sans-serif, system-ui, sans-serif; letter-spacing: 0.12em; text-align: center;
+}
+.tc-btn { align-items: center; }
+.tc-pedal span, .tc-btn span { position: relative; padding: 12px 6px; }
+.tc-pedal i { position: absolute; inset: 0; transform-origin: bottom; transform: scaleY(0); }
+.tc-pedal[data-k='gas'] i { background: linear-gradient(to top, rgba(63, 208, 122, 0.8), rgba(63, 208, 122, 0.25)); }
+.tc-pedal[data-k='brake'] i { background: linear-gradient(to top, rgba(255, 59, 59, 0.8), rgba(255, 59, 59, 0.25)); }
+.tc-pedal.on, .tc-btn.on { border-color: rgba(255, 255, 255, 0.65); }
+.tc-btn.on { background: rgba(255, 176, 32, 0.5); }
+
+/* default layout: left thumb brake + handbrake, right thumb gas + drift, steering by tilt */
+[data-k='brake'] { left: var(--sl); bottom: var(--sb); width: 130px; height: 210px; }
+[data-k='handbrake'] { left: var(--sl); bottom: calc(var(--sb) + 226px); width: 130px; height: 84px; }
+[data-k='gas'] { right: var(--sr); bottom: var(--sb); width: 140px; height: 240px; }
+[data-k='drift'] { right: var(--sr); bottom: calc(var(--sb) + 256px); width: 140px; height: 76px; }
+.tc-steer { display: none; bottom: var(--sb); width: 104px; height: 104px; font-size: 34px; letter-spacing: 0; }
+/* no tilt (or "touch buttons only"): steer with the left thumb, brake moves beside the gas */
+body.touch-steer-buttons .tc-steer { display: flex; }
+body.touch-steer-buttons [data-k='left'] { left: var(--sl); }
+body.touch-steer-buttons [data-k='right'] { left: calc(var(--sl) + 116px); }
+body.touch-steer-buttons [data-k='brake'] { left: auto; right: calc(var(--sr) + 154px); height: 180px; }
+body.touch-steer-buttons [data-k='handbrake'] { bottom: calc(var(--sb) + 118px); width: 220px; height: 72px; }
+/* full tilt: pitch drives the pedals, the on-screen ones stay as an override */
+body.touch-fulltilt .tc-pedal { opacity: 0.45; }
+
+.tc-top { position: absolute; top: max(12px, env(safe-area-inset-top)); right: var(--sr); display: flex; gap: 10px; }
+.tc-top button {
+  width: 48px; height: 48px; border-radius: 14px; font-size: 22px; color: #fff;
+  background: rgba(14, 16, 20, 0.6); border: 1px solid rgba(255, 255, 255, 0.2); touch-action: manipulation;
+}
+
+/* HUD out from under the thumbs */
+body.touch #help, body.touch #tele { display: none; }
+body.touch #hud { left: 50%; transform: translateX(-50%); bottom: var(--sb); }
+body.touch:not(.panel-hidden) #hud { left: calc((100% - var(--panel-w)) / 2); }
+body.touch #title { top: max(14px, env(safe-area-inset-top)); left: var(--sl); }
+
+#start.tap {
+  pointer-events: auto; cursor: pointer; top: 50%; bottom: auto; transform: translate(-50%, -50%);
+  max-width: min(440px, 86vw); padding: 22px 28px; text-align: center; font-size: 24px;
+}
+#start.tap small { font-size: 13px; line-height: 1.45; margin-top: 8px; }

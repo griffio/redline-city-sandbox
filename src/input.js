@@ -29,6 +29,7 @@ export class Input {
     this.prevButtons = [];
     this.keySteer = 0;
     this.pad = null;
+    this.touch = null; // TouchControls, attached by main when available
     this.state = {
       steer: 0, // -1..1, +left (car-relative)
       stickX: 0, stickY: 0, // screen-space stick (+x right, +y up), deadzone applied
@@ -132,6 +133,15 @@ export class Input {
         drift = drift || down(BTN.B) || down(BTN.RB);
         altBrake = Math.max(altBrake, b(BTN.X), lt);
       }
+    }
+
+    // --- touch / tilt ---
+    const t = this.touch?.read(dt);
+    if (t?.engaged) s.source = 'touch';
+    if (t && s.source === 'touch') {
+      ({ steer, throttle, brake, handbrake, drift } = t);
+      altBrake = brake;
+      stickX = stickY = stickMag = 0; // no screen-space stick: point-to-steer falls back to car-relative
     }
 
     Object.assign(s, { steer, throttle, brake, handbrake, drift, altBrake, stickX, stickY, stickMag });
