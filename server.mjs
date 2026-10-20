@@ -30,7 +30,8 @@ const TTS_MODEL = '@cf/deepgram/aura-2-en';
 
 const cfUrl = (model) => `https://api.cloudflare.com/client/v4/accounts/${CF_ACCOUNT}/ai/run/${model}`;
 
-async function cfImage({ prompt, image, width = 512, height = 1024, steps = 25, seed }) {
+// steps mirrors IMAGE_STEPS in worker/index.js: ~1,350 neurons per 512×1024 image, ~7 a day on the Free plan.
+async function cfImage({ prompt, image, width = 512, height = 1024, steps = 12, seed }) {
   const form = new FormData();
   form.append('prompt', prompt);
   form.append('width', String(width));

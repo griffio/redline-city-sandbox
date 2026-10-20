@@ -65,7 +65,8 @@ npm run dev:cf       # run the same Worker locally; the AI binding still runs on
   * AI calls must come from the site's own origin.
   * Each visitor gets 3 AI calls per minute, and the whole site 10.
   * Cloudflare's limiter is per data centre, so treat these as a brake rather than an exact cap.
-* **Free-plan allowance:** the Workers **Free** plan includes 10,000 Workers AI neurons a day, roughly a handful of FLUX.2-dev images. When it's used up, the game says so, and it resets at 00:00 UTC. Workers Paid lifts the cap, and extra use is billed.
+* **Free-plan allowance:** the Workers **Free** plan includes 10,000 Workers AI neurons a day, about 7 FLUX.2-dev images at the 12 steps the game uses (`IMAGE_STEPS` in `worker/index.js`; 25 steps would be 3). When it's used up, the game says so, and it resets at 00:00 UTC. Workers Paid lifts the cap, and extra use is billed.
+  * Cloudflare's enforcement and the dashboard's **Neurons used today** counter don't always agree: error 4006 ("allowance used up") is widely reported to persist after the reset while the dashboard shows 0/10k. The Worker logs the raw error to Workers Logs and returns its code, so a 429 can be told apart from the per-minute limiter.
 
 ### GitHub Pages
 

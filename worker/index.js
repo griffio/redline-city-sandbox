@@ -6,6 +6,10 @@ const IMAGE_MODEL = '@cf/black-forest-labs/flux-2-dev'; // klein variants false-
 const TTS_MODEL = '@cf/deepgram/aura-2-en';
 const MAX_IMAGE_B64 = 4_000_000; // the 512×1024 reference PNG is ~0.3–1 MB
 const MAX_PROMPT = 2000;
+// FLUX.2 [dev] bills per 512×512 tile per step (18.75 neurons in + 37.5 out). At 512×1024 (2 tiles)
+// a step is ~112 neurons, so 12 steps ≈ 1,350 per image: ~7 images from the Free plan's 10,000/day.
+// (25 steps was ~2,800 per image, only 3 a day.)
+const IMAGE_STEPS = 12;
 
 export default {
   async fetch(request, env) {
@@ -18,8 +22,14 @@ export default {
       return json({ error: 'unknown endpoint' }, 404);
     } catch (err) {
       const msg = String(err?.message || err);
-      // 4006 = the account's daily Workers AI allowance is spent (Free plan: 10,000 neurons/day)
-      if (msg.includes('4006')) return json({ error: "Today's free Workers AI allowance is used up. It resets at 00:00 UTC." }, 429);
+      console.error(`${request.method} ${url.pathname} failed: ${msg}`); // shows up in Workers Logs
+      // Daily Workers AI allowance spent (Free plan: 10,000 neurons/day). 3036 is the documented
+      // "Account limited" code; 4006 is what the binding actually returns, and it's widely reported to
+      // keep firing after the 00:00 UTC reset while the dashboard still shows 0/10k neurons used.
+      const quota = msg.match(/\b(3036|4006)\b/);
+      if (quota) {
+        return json({ error: "Today's free Workers AI allowance is used up. It resets at 00:00 UTC.", code: quota[1], detail: msg }, 429);
+      }
       return json({ error: msg }, 500);
     }
   },
@@ -30,19 +40,21 @@ async function detailCar(request, env, url) {
   // Browsers always send Origin on a POST: only accept calls from the game's own pages.
   if (request.headers.get('origin') !== url.origin) return json({ error: 'forbidden' }, 403);
   if (Number(request.headers.get('content-length') || 0) > MAX_IMAGE_B64 + 10_000) return json({ error: 'too large' }, 413);
-  const limited = await rateLimited(request, env);
-  if (limited) return limited;
 
   const body = await request.json();
   const prompt = String(body.prompt || '').slice(0, MAX_PROMPT);
   const image = String(body.image || '');
   if (!prompt || !image || image.length > MAX_IMAGE_B64) return json({ error: 'prompt and image required' }, 400);
 
+  // Budget check last, so a malformed request doesn't spend one of the visitor's 3 tokens a minute.
+  const limited = await rateLimited(request, env);
+  if (limited) return limited;
+
   const form = new FormData();
   form.append('prompt', prompt);
   form.append('width', '512'); // fixed: the client clips the result to this frame
   form.append('height', '1024');
-  form.append('steps', '25');
+  form.append('steps', String(IMAGE_STEPS));
   if (Number.isInteger(body.seed)) form.append('seed', String(body.seed));
   form.append('input_image_0', new Blob([base64ToBytes(image)], { type: 'image/png' }), 'car.png');
   const multipart = new Response(form);
@@ -75,7 +87,11 @@ async function voice(request, env, url) {
   throw new Error('the speech model returned no audio');
 }
 
-/** Paid AI calls: a per-visitor budget plus a site-wide one, so one visitor can't drain the daily allowance. */
+/**
+ * Paid AI calls: a per-visitor budget plus a site-wide one, so one visitor can't drain the daily allowance.
+ * Every call here spends a token, whether or not the AI call then succeeds, so call it only once the
+ * request is known to be valid. Limits are approximate: counted per machine, synced per location.
+ */
 async function rateLimited(request, env) {
   const ip = request.headers.get('cf-connecting-ip') || 'anon';
   for (const [limiter, key] of [[env.AI_LIMIT_IP, ip], [env.AI_LIMIT_SITE, 'site']]) {
