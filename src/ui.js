@@ -166,7 +166,7 @@ export class UI {
       this.check('Traction control', g.car.t.tractionControl, (v) => { g.car.t.tractionControl = v; }),
       this.check('Auto-throttle (point mode)', CONTROL_TUNING.autoThrottle, (v) => { CONTROL_TUNING.autoThrottle = v; }),
       this.check('Sound', g.audio.enabled, (v) => g.audio.setEnabled(v)),
-      this.check('Announcer (AI voice)', g.audio.voiceEnabled, (v) => { g.audio.voiceEnabled = v; }),
+      this.check('Announcer', g.audio.voiceEnabled, (v) => { g.audio.voiceEnabled = v; }),
     ));
 
     // sliders

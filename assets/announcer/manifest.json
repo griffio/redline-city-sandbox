@@ -1,0 +1,142 @@
+{
+  "great-drift": {
+    "text": "Great drift!",
+    "prompt": "[excited] GREAT drift!!",
+    "voice": "FGY2WhTYpPnrIDTdsKH5",
+    "model": "eleven_v4",
+    "settings": {
+      "stability": 0,
+      "similarity_boost": 0.8
+    },
+    "seed": 1002,
+    "request_id": "uQvd4pkTgqMnvJJISWIG",
+    "file": "great-drift.mp3",
+    "input_lufs": -20.44,
+    "input_tp": -4.13,
+    "take": "great-drift-3",
+    "transcript": "Great drift",
+    "metrics": {
+      "total_s": 1.47,
+      "speech_s": 1.34,
+      "lufs": -18.2,
+      "tp_db": -1.9,
+      "f0_med": 283,
+      "f0_range": 229,
+      "hf_ratio": 0.283,
+      "centroid_hz": 1485,
+      "energy": 0.09
+    }
+  },
+  "insane-drift": {
+    "text": "Insane drift!",
+    "prompt": "[shouting] INSAAANE DRIFT!!",
+    "voice": "FGY2WhTYpPnrIDTdsKH5",
+    "model": "eleven_v4",
+    "settings": {
+      "stability": 0,
+      "similarity_boost": 0.8
+    },
+    "seed": 1000,
+    "request_id": "j8MaSTiuYafftvZ0NEA4",
+    "file": "insane-drift.mp3",
+    "input_lufs": -17.32,
+    "input_tp": -4.29,
+    "take": "insane-drift-1",
+    "transcript": "Insane drift",
+    "metrics": {
+      "total_s": 1.87,
+      "speech_s": 1.74,
+      "lufs": -16.4,
+      "tp_db": -3.4,
+      "f0_med": 272,
+      "f0_range": 224,
+      "hf_ratio": 0.613,
+      "centroid_hz": 2374,
+      "energy": 1.57
+    }
+  },
+  "mini-turbo": {
+    "text": "Mini turbo!",
+    "prompt": "[excited] MINI TURBO!!",
+    "voice": "FGY2WhTYpPnrIDTdsKH5",
+    "model": "eleven_v4",
+    "settings": {
+      "stability": 0,
+      "similarity_boost": 0.8
+    },
+    "seed": 1002,
+    "request_id": "cR9wejMkGiQkNQ1ITVtr",
+    "file": "mini-turbo.mp3",
+    "input_lufs": -17.47,
+    "input_tp": -5.29,
+    "take": "mini-turbo-3",
+    "transcript": "Mini Turbo",
+    "metrics": {
+      "total_s": 1.43,
+      "speech_s": 1.28,
+      "lufs": -16.5,
+      "tp_db": -4.2,
+      "f0_med": 384,
+      "f0_range": 282,
+      "hf_ratio": 0.236,
+      "centroid_hz": 1672,
+      "energy": 0.48
+    }
+  },
+  "nice-drift": {
+    "text": "Nice drift!",
+    "prompt": "[excited] NICE drift!",
+    "voice": "FGY2WhTYpPnrIDTdsKH5",
+    "model": "eleven_v4",
+    "settings": {
+      "stability": 0,
+      "similarity_boost": 0.8
+    },
+    "seed": 1001,
+    "request_id": "a36L2NqMPkilIa3eu6LE",
+    "file": "nice-drift.mp3",
+    "input_lufs": -20.32,
+    "input_tp": -3.31,
+    "take": "nice-drift-2",
+    "transcript": "Nice drift",
+    "metrics": {
+      "total_s": 1.53,
+      "speech_s": 1.4,
+      "lufs": -18.9,
+      "tp_db": -1.9,
+      "f0_med": 259,
+      "f0_range": 259,
+      "hf_ratio": 0.329,
+      "centroid_hz": 1625,
+      "energy": 0.49
+    }
+  },
+  "wrecked": {
+    "text": "Wrecked!",
+    "prompt": "[shouting] WRECKED!!",
+    "voice": "FGY2WhTYpPnrIDTdsKH5",
+    "model": "eleven_v4",
+    "settings": {
+      "stability": 0,
+      "similarity_boost": 0.8
+    },
+    "seed": 1002,
+    "request_id": "SxKiRpvsScnCKr4hvNly",
+    "file": "wrecked.mp3",
+    "input_lufs": -15.27,
+    "input_tp": -1.82,
+    "take": "wrecked-3",
+    "transcript": "Wrecked!",
+    "metrics": {
+      "total_s": 1.01,
+      "speech_s": 0.84,
+      "lufs": -16.5,
+      "tp_db": -3.0,
+      "f0_med": 441,
+      "f0_range": 248,
+      "hf_ratio": 0.308,
+      "centroid_hz": 1646,
+      "energy": 0.4
+    }
+  }
+}

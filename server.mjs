@@ -5,7 +5,6 @@ import http from 'node:http';
 import fs from 'node:fs/promises';
 import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
-import crypto from 'node:crypto';
 
 const ROOT = path.dirname(new URL(import.meta.url).pathname);
 const PORT = Number(process.env.PORT || 5173);
@@ -26,7 +25,6 @@ loadEnv();
 const CF_ACCOUNT = process.env.CLOUDFLARE_ACCOUNT_ID || process.env.CLOUDFLARE_API_KEY;
 const CF_TOKEN = process.env.CLOUDFLARE_API_TOKEN || process.env.COULDFLARE_API_TOKEN;
 const IMAGE_MODEL = '@cf/black-forest-labs/flux-2-dev'; // klein variants false-flag most car prompts
-const TTS_MODEL = '@cf/deepgram/aura-2-en';
 
 const cfUrl = (model) => `https://api.cloudflare.com/client/v4/accounts/${CF_ACCOUNT}/ai/run/${model}`;
 
@@ -49,18 +47,6 @@ async function cfImage({ prompt, image, width = 512, height = 1024, steps = 12, 
     throw new Error(json.errors?.map((e) => e.message).join('; ') || `HTTP ${res.status}`);
   }
   return Buffer.from(json.result.image, 'base64');
-}
-
-async function cfSpeech(text, speaker = 'orion') {
-  const res = await fetch(cfUrl(TTS_MODEL), {
-    method: 'POST',
-    headers: { Authorization: `Bearer ${CF_TOKEN}`, 'content-type': 'application/json' },
-    body: JSON.stringify({ text, speaker }),
-  });
-  if (!res.ok || !(res.headers.get('content-type') || '').startsWith('audio/')) {
-    throw new Error(`TTS failed: HTTP ${res.status} ${await res.text()}`);
-  }
-  return Buffer.from(await res.arrayBuffer());
 }
 
 // --- http ----------------------------------------------------------------------
@@ -100,8 +86,7 @@ function overBudget() {
 async function handleApi(req, res, url) {
   if (!CF_ACCOUNT || !CF_TOKEN) return send(res, 500, { error: 'Cloudflare credentials missing from .env' });
   if (url.pathname === '/api/health') return send(res, 200, { ok: true });
-  const cachedVoice = url.pathname === '/api/voice'; // cache hits are free; checked again below
-  if (!cachedVoice && overBudget()) return send(res, 429, { error: 'AI request budget exceeded, try again in a minute' });
+  if (overBudget()) return send(res, 429, { error: 'AI request budget exceeded, try again in a minute' });
 
   // POST /api/detail-car  body: {prompt, image: <base64 png>}  -> image/jpeg
   // Runs the software-rendered sprite through FLUX.2 as a reference image and saves the result.
@@ -125,22 +110,6 @@ async function handleApi(req, res, url) {
     const name = `img-${Date.now()}.jpg`;
     await fs.writeFile(path.join(dir, name), out);
     return send(res, 200, { url: `/assets/generated/${name}` });
-  }
-
-  // GET /api/voice?text=... -> cached mp3 announcer line
-  if (url.pathname === '/api/voice' && req.method === 'GET') {
-    const text = (url.searchParams.get('text') || '').slice(0, 200);
-    const speaker = url.searchParams.get('speaker') || 'orion';
-    if (!text) return send(res, 400, { error: 'text required' });
-    const hash = crypto.createHash('sha1').update(`${speaker}:${text}`).digest('hex').slice(0, 16);
-    const dir = path.join(ROOT, 'assets', 'voice');
-    const file = path.join(dir, `${hash}.mp3`);
-    if (!existsSync(file)) {
-      if (overBudget()) return send(res, 429, { error: 'AI request budget exceeded, try again in a minute' });
-      await fs.mkdir(dir, { recursive: true });
-      await fs.writeFile(file, await cfSpeech(text, speaker));
-    }
-    return send(res, 200, await fs.readFile(file), 'audio/mpeg');
   }
 
   send(res, 404, { error: 'unknown endpoint' });

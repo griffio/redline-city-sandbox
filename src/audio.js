@@ -4,11 +4,12 @@
 // Engine: two buses (on-load / off-load) blended by throttle. Each bus is a stack of seamless
 // RPM loops; the two neighbours of the current RPM are equal-power crossfaded in log-RPM and
 // each is pitch-corrected with playbackRate = rpm / loopRpm, so the pitch is always exact.
-// The announcer uses Deepgram Aura TTS via /api/voice (dev server or Cloudflare Worker).
+// The announcer lines are generated once, at build time, with ElevenLabs (tools/voice/announcer.mjs)
+// and shipped as static files under assets/announcer/, so nothing is synthesised at runtime.
 
 const clamp = (v, lo, hi) => (v < lo ? lo : v > hi ? hi : v);
 const AUDIO_ROOT = 'assets/audio/';
-import { aiAvailable } from './api.js';
+const VOICE_ROOT = 'assets/announcer/';
 
 const SMOOTH = 0.03; // seconds, gain/rate smoothing
 
@@ -325,16 +326,22 @@ export class Audio {
     src.stop(t + 1.2);
   }
 
-  /** Fetch + cache a TTS line from the dev server. Fails silently (e.g. static hosting). */
-  async loadVoice(text) {
-    if (!this.ctx || this.voices.has(text)) return this.voices.get(text);
-    const p = aiAvailable()
-      .then((ok) => (ok ? fetch(`api/voice?text=${encodeURIComponent(text)}`) : Promise.reject(new Error('no AI backend'))))
-      .then((r) => (r.ok ? r.arrayBuffer() : Promise.reject(r.status)))
-      .then((b) => this.ctx.decodeAudioData(b))
-      .catch(() => null);
-    this.voices.set(text, p);
-    return p;
+  /** "Nice drift!" → nice-drift: the file name of a line (mirrored in tools/voice/announcer.mjs). */
+  static slug(text) {
+    return text.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+  }
+
+  /** Fetch + decode a pre-generated announcer line (cached). Resolves null if the file is missing. */
+  loadVoice(text) {
+    if (!this.ctx) return Promise.resolve(null);
+    if (!this.voices.has(text)) {
+      const p = fetch(`${VOICE_ROOT}${Audio.slug(text)}.mp3`)
+        .then((r) => (r.ok ? r.arrayBuffer() : Promise.reject(new Error(`HTTP ${r.status}`))))
+        .then((b) => this.ctx.decodeAudioData(b))
+        .catch((err) => { console.warn(`Announcer line "${text}" unavailable:`, err.message || err); return null; });
+      this.voices.set(text, p);
+    }
+    return this.voices.get(text);
   }
 
   async say(text) {

@@ -9,7 +9,6 @@ dist/
 __pycache__/
 
 # runtime outputs of the AI endpoints (dev server only)
-assets/voice/
 assets/generated/
 
 # Freesound previews used to regenerate audio loops (see assets/audio/CREDITS.md)

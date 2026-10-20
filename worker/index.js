@@ -3,7 +3,6 @@
 // The endpoints mirror server.mjs so the client works the same against either.
 
 const IMAGE_MODEL = '@cf/black-forest-labs/flux-2-dev'; // klein variants false-flag most car prompts
-const TTS_MODEL = '@cf/deepgram/aura-2-en';
 const MAX_IMAGE_B64 = 4_000_000; // the 512×1024 reference PNG is ~0.3–1 MB
 const MAX_PROMPT = 2000;
 // FLUX.2 [dev] bills per 512×512 tile per step (18.75 neurons in + 37.5 out). At 512×1024 (2 tiles)
@@ -17,7 +16,6 @@ export default {
     if (!url.pathname.startsWith('/api/')) return env.ASSETS.fetch(request);
     try {
       if (url.pathname === '/api/health') return json({ ok: true });
-      if (url.pathname === '/api/voice' && request.method === 'GET') return await voice(request, env, url);
       if (url.pathname === '/api/detail-car' && request.method === 'POST') return await detailCar(request, env, url);
       return json({ error: 'unknown endpoint' }, 404);
     } catch (err) {
@@ -67,26 +65,6 @@ async function detailCar(request, env, url) {
   return json({ url: `data:${type};base64,${out.image}` });
 }
 
-/** Announcer line: pre-generated lines are static assets; anything else goes to Aura TTS. */
-async function voice(request, env, url) {
-  const text = (url.searchParams.get('text') || '').slice(0, 200);
-  const speaker = url.searchParams.get('speaker') || 'orion';
-  if (!text) return json({ error: 'text required' }, 400);
-  // same naming as the dev server's assets/voice cache
-  const hash = (await sha1Hex(`${speaker}:${text}`)).slice(0, 16);
-  const cached = await env.ASSETS.fetch(new URL(`/assets/voice/${hash}.mp3`, url));
-  if (cached.ok) return audio(cached.body);
-
-  const limited = await rateLimited(request, env);
-  if (limited) return limited;
-  const out = await env.AI.run(TTS_MODEL, { text, speaker });
-  // the binding may hand back a stream, raw bytes, a Response or base64 depending on runtime version
-  if (out instanceof Response) return audio(out.body);
-  if (out instanceof ReadableStream || out instanceof ArrayBuffer || ArrayBuffer.isView(out)) return audio(out);
-  if (typeof out?.audio === 'string') return audio(base64ToBytes(out.audio));
-  throw new Error('the speech model returned no audio');
-}
-
 /**
  * Paid AI calls: a per-visitor budget plus a site-wide one, so one visitor can't drain the daily allowance.
  * Every call here spends a token, whether or not the AI call then succeeds, so call it only once the
@@ -105,16 +83,9 @@ async function rateLimited(request, env) {
 const json = (data, status = 200) =>
   new Response(JSON.stringify(data), { status, headers: { 'content-type': 'application/json', 'cache-control': 'no-store' } });
 
-const audio = (body) => new Response(body, { headers: { 'content-type': 'audio/mpeg', 'cache-control': 'public, max-age=86400' } });
-
 function base64ToBytes(b64) {
   const bin = atob(b64);
   const bytes = new Uint8Array(bin.length);
   for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
   return bytes;
-}
-
-async function sha1Hex(s) {
-  const d = await crypto.subtle.digest('SHA-1', new TextEncoder().encode(s));
-  return [...new Uint8Array(d)].map((b) => b.toString(16).padStart(2, '0')).join('');
 }

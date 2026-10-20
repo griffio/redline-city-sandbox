@@ -1,0 +1,16 @@
+{
+  "voice": { "id": "FGY2WhTYpPnrIDTdsKH5", "name": "Laura" },
+  "model": "eleven_v4",
+  "settings": {
+    "eleven_v4": { "stability": 0.0, "similarity_boost": 0.8 },
+    "eleven_v3": { "stability": 0.0, "similarity_boost": 0.8 },
+    "eleven_multilingual_v2": { "stability": 0.3, "similarity_boost": 0.8, "style": 0.9, "use_speaker_boost": true }
+  },
+  "lines": {
+    "Nice drift!": "[excited] NICE drift!",
+    "Great drift!": "[excited] GREAT drift!!",
+    "Insane drift!": "[shouting] INSAAANE DRIFT!!",
+    "Mini turbo!": "[excited] MINI TURBO!!",
+    "Wrecked!": "[shouting] WRECKED!!"
+  }
+}
