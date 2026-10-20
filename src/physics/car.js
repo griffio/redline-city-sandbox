@@ -79,13 +79,13 @@ export const PRESETS = {
   },
 };
 
-const GEARS = [3.3, 2.15, 1.55, 1.2, 0.97, 0.8];
+export const GEARS = [3.3, 2.15, 1.55, 1.2, 0.97, 0.8];
 const REVERSE_RATIO = 3.0;
-const FINAL_DRIVE = 3.6;
-const WHEEL_RADIUS = 0.33;
+export const FINAL_DRIVE = 3.6;
+export const WHEEL_RADIUS = 0.33;
 const IDLE_RPM = 900;
 
-function torqueAt(rpm, maxRpm) {
+export function torqueAt(rpm, maxRpm) {
   // Broad hump peaking around 4800rpm, ~380Nm.
   const x = rpm / maxRpm;
   const t = 240 + 140 * Math.sin(clamp(x, 0, 1) * Math.PI * 0.95);

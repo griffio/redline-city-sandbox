@@ -57,6 +57,29 @@ body.perf-hidden #perf { display: none; }
 #banner b.bad { color: var(--accent); }
 #banner span { font-size: 14px; letter-spacing: 0.3em; color: var(--accent2); font-weight: 700; }
 
+/* generated tracks: lap timer under the title, pace note at the top, minimap top right */
+#race { display: none; margin-top: 8px; font-variant-numeric: tabular-nums; }
+body.course-mode #race { display: block; }
+body.course-mode #best { display: none; }
+#race .rtime { font-size: 36px; font-weight: 900; font-style: italic; line-height: 1; letter-spacing: 0.02em; }
+#race .rinfo { margin-top: 5px; font-size: 11px; letter-spacing: 0.14em; color: var(--muted); }
+#race .rdelta { margin-top: 3px; font: 700 14px ui-monospace, monospace; }
+#race .rdelta.ahead { color: #3fd07a; }
+#race .rdelta.behind { color: var(--accent); }
+#pacenote {
+  position: fixed; top: 58px; left: calc((100% - var(--panel-w)) / 2); transform: translateX(-50%); text-align: center;
+  pointer-events: none; text-shadow: 0 2px 10px #000; display: none;
+}
+body.course-mode #pacenote.on { display: block; }
+#pacenote b { font-size: 30px; font-weight: 900; font-style: italic; }
+#pacenote span { margin-left: 10px; font-size: 18px; font-weight: 800; font-style: italic; color: var(--accent2); }
+#pacenote small { display: block; margin-top: 2px; font-size: 13px; color: #c9cdd2; letter-spacing: 0.04em; }
+body.course-mode #banner { top: 140px; }
+#minimap { position: fixed; top: 16px; right: calc(var(--panel-w) + 16px); width: 170px; height: 170px; display: none; pointer-events: none; }
+body.course-mode.map-on #minimap { display: block; }
+.medals { display: flex; flex-wrap: wrap; gap: 4px 12px; font: 12px ui-monospace, monospace; color: #c9cdd2; margin: 4px 0; }
+.medals i { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 5px; }
+
 #toast {
   position: fixed; top: 18px; left: calc((100% - var(--panel-w)) / 2); transform: translate(-50%, -10px); opacity: 0;
   background: var(--panel); border: 1px solid var(--line); padding: 8px 14px; border-radius: 999px;
@@ -139,7 +162,8 @@ input[type='range'] { width: 100%; accent-color: var(--accent); }
   body:not(.panel-hidden) #help { display: none; }
 }
 
-body.panel-hidden #banner, body.panel-hidden #toast, body.panel-hidden #start { left: 50%; }
+body.panel-hidden #banner, body.panel-hidden #toast, body.panel-hidden #start, body.panel-hidden #pacenote { left: 50%; }
+body.panel-hidden #minimap { right: 16px; }
 
 /* ---------- touch / tilt (tablets) ---------- */
 :root {
@@ -192,6 +216,7 @@ body.touch-fulltilt .tc-pedal { opacity: 0.45; }
 }
 
 /* HUD out from under the thumbs */
+body.touch #minimap { top: calc(max(12px, env(safe-area-inset-top)) + 60px); right: var(--sr); width: 140px; height: 140px; }
 body.touch #help, body.touch #tele { display: none; }
 body.touch #hud { left: 50%; transform: translateX(-50%); bottom: var(--sb); }
 body.touch:not(.panel-hidden) #hud { left: calc((100% - var(--panel-w)) / 2); }

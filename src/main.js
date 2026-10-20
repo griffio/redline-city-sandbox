@@ -1,4 +1,4 @@
-import { Renderer } from './gpu/renderer.js';
+import { Renderer, COURSE_EXTENT, COURSE_RES, GROUND_MODE } from './gpu/renderer.js';
 import { Car, DEFAULT_TUNING, PRESETS } from './physics/car.js';
 import { World } from './physics/world.js';
 import { Input, INPUT_TUNING } from './input.js';
@@ -9,10 +9,16 @@ import { UI } from './ui.js';
 import { TouchControls, TOUCH_TUNING } from './touch.js';
 import { buildAtlas, paintCarRegion, paintDetailedCar, renderCarForAI, REGIONS, CAR_COLORS } from './sprites.js';
 import { aiAvailable } from './api.js';
+import { generate, seedFrom, KINDS, WALL_GAP } from './courses/generate.js';
+import { simulate } from './courses/bot.js';
+import { bakeCourseMap } from './courses/groundmap.js';
+import { CourseSession, formatTime } from './courses/session.js';
 
 const PHYS_DT = 1 / 240;
 const STORAGE_KEY = 'redline.sandbox.v1';
 const SPAWN = [0, 0, Math.PI / 2];
+const GHOST = [0.75, 0.85, 1, 0.38];
+const randomSeed = () => String(1000 + Math.floor(Math.random() * 9000));
 
 const store = {
   load() { try { return JSON.parse(localStorage.getItem(STORAGE_KEY) || 'null'); } catch { return null; } },
@@ -31,11 +37,14 @@ class Game {
     this.audio = new Audio();
     this.particles = [];
     this.lastMark = [null, null, null, null];
-    this.score = { active: false, points: 0, mult: 1, time: 0, idle: 0, best: 0, total: 0, flash: 0, flashText: '', flashBad: false };
+    this.score = { active: false, points: 0, mult: 1, time: 0, idle: 0, best: 0, total: 0, flash: 0, flashText: '', flashSub: '', flashBad: false };
     this.carLook = { color: CAR_COLORS.Redline, colorName: 'Redline', stripes: true, decal: '' };
     this.aiSpriteUrl = null;
     this.scheme = SCHEMES[0];
     this.preset = 'Balanced';
+    this.course = null; // {kind, seed, data} while driving a generated track; null = sandbox
+    this.session = null; // its timing (courses/session.js)
+    this.courseOpts = { ghost: true, notes: true, map: true };
     // resolution: 'auto' adapts render scale to hold ~60fps; numbers are fixed fractions of native
     this.perf = { mode: 'auto', scale: 1, timer: 0, frames: 0, dtSum: 0, fps: 0, cooldown: 2, slow: 0 }; // cooldown doubles as startup warm-up
 
@@ -56,6 +65,7 @@ class Game {
     this.input.touch = this.touch;
     if (this.touch.enabled) document.body.classList.add('panel-hidden', 'help-hidden');
     this.ui = new UI(this);
+    if (this.pendingCourse) this.loadCourse(this.pendingCourse.kind, this.pendingCourse.seed);
     this.resetCar();
     this.input.onPadChange = (id, on) => this.toast(on ? `🎮 ${id.split('(')[0].trim()} connected` : 'Controller disconnected');
 
@@ -106,6 +116,7 @@ class Game {
   applyPreset(name, rebuild = true) {
     this.preset = name;
     Object.assign(this.car.t, DEFAULT_TUNING, PRESETS[name] || {});
+    if (this.course) this.startSession(); // medal times depend on the car
     this.save();
     if (rebuild && this.ui) this.ui.build();
   }
@@ -117,6 +128,7 @@ class Game {
       touch: { ...TOUCH_TUNING },
       look: this.carLook, aiSpriteUrl: this.aiSpriteUrl,
       sound: this.audio.enabled, voice: this.audio.voiceEnabled, best: this.score.best, resolution: this.perf.mode,
+      course: this.course && { kind: this.course.kind, seed: this.course.seed }, courseOpts: { ...this.courseOpts },
     };
   }
 
@@ -134,6 +146,8 @@ class Game {
     this.audio.enabled = s.sound ?? true;
     this.audio.voiceEnabled = s.voice ?? true;
     this.score.best = s.best || 0;
+    if (s.courseOpts) Object.assign(this.courseOpts, s.courseOpts);
+    this.pendingCourse = s.course || null; // loaded once the world and UI exist
     this.setResolution(s.resolution ?? 'auto');
   }
 
@@ -178,11 +192,85 @@ class Game {
   }
 
   resetCar() {
-    this.car.reset(...SPAWN);
+    const st = this.course?.data.start;
+    this.car.reset(...(st ? [st.x, st.y, st.heading] : SPAWN));
     this.lastMark = [null, null, null, null];
     this.camera.snap(this.car);
     this.score.active = false;
     this.score.points = 0;
+    if (this.session) {
+      // on a course, reset means start the run again
+      this.session.reset();
+      this.world.resetProps();
+    }
+  }
+
+  // ---------------------------------------------------------------- courses
+  /** Generate a track from any seed text (a random one by default) and drive it. */
+  loadCourse(kind, seed = randomSeed()) {
+    if (!KINDS[kind]) return this.loadSandbox();
+    seed = String(seed).trim() || randomSeed();
+    let data;
+    try {
+      data = generate(kind, seedFrom(seed));
+    } catch {
+      this.toast(`No ${KINDS[kind].name.toLowerCase()} fits seed "${seed}". Try another.`);
+      return;
+    }
+    this.world.loadCourse(data);
+    const C = data.center, n = C.length;
+    const timingLine = (i) => [C[i][0], C[i][1], data.normals[i][1], -data.normals[i][0]];
+    const st = data.start;
+    this.renderer.setCourse(bakeCourseMap(data, COURSE_EXTENT, COURSE_RES), {
+      mode: kind === 'gymkhana' ? GROUND_MODE.guide : GROUND_MODE.track,
+      halfW: data.width / 2, wall: WALL_GAP, closed: data.closed,
+      start: kind === 'gymkhana' ? [st.x, st.y, Math.cos(st.heading), Math.sin(st.heading)] : timingLine(0),
+      finish: timingLine(n - 1),
+    });
+    this.renderer.clearSkids();
+    this.course = { kind, seed, data };
+    this.startSession();
+    this.ui?.setCourse(data);
+    this.ui?.build();
+    this.toast(`${KINDS[kind].name} · seed ${seed}`);
+    this.save();
+  }
+
+  /** Time the bot round the track with the current car (par, medals, ghost) and start a fresh run. */
+  startSession() {
+    const { kind, seed, data } = this.course;
+    this.session = new CourseSession(data, simulate(data, { ...this.car.t }), `${kind}:${seed}`);
+    this.resetCar();
+  }
+
+  loadSandbox() {
+    this.course = null;
+    this.session = null;
+    this.world.loadSandbox();
+    this.renderer.clearCourse();
+    this.renderer.clearSkids();
+    this.resetCar();
+    this.ui?.setCourse(null);
+    this.ui?.build();
+    this.save();
+  }
+
+  handleCourseEvents(events) {
+    const s = this.score;
+    for (const e of events) {
+      if (e.type !== 'lap' && e.type !== 'finish') continue;
+      const tags = [
+        e.type === 'lap' ? `LAP ${e.lap}` : e.medal ? '' : 'FINISH',
+        e.medal?.toUpperCase(),
+        e.penalty ? `+${e.penalty} s CONES` : '',
+        e.best ? 'BEST' : '',
+      ].filter(Boolean);
+      s.flash = e.type === 'finish' ? 4 : 2.5;
+      s.flashText = formatTime(e.time);
+      s.flashSub = tags.join(' · ');
+      s.flashBad = false;
+      if (e.type === 'finish') this.toast('Press R to go again, N for a new track');
+    }
   }
 
   toast(text) {
@@ -279,6 +367,7 @@ class Game {
   handleToggles() {
     const i = this.input;
     if (i.pressed('KeyR') || i.pressed('pad:Y') || i.pressed('pad:UP')) this.resetCar();
+    if (i.pressed('KeyN') || i.pressed('pad:DOWN')) this.loadCourse(this.course?.kind ?? 'circuit');
     if (i.pressed('KeyC') || i.pressed('pad:LB')) {
       const modes = ['velocity', 'heading', 'north'];
       CAMERA_TUNING.mode = modes[(modes.indexOf(CAMERA_TUNING.mode) + 1) % modes.length];
@@ -333,6 +422,7 @@ class Game {
       this.audio.impact(impact);
       this.input.rumble(Math.min(1, impact / 8), 0.3, 160);
     }
+    if (this.session) this.handleCourseEvents(this.session.update(dt, this.car, this.world));
     this.updateScore(dt, impact);
     this.updateParticles(dt);
     this.updateRumble(cmd);
@@ -346,6 +436,7 @@ class Game {
       this.renderer.render(this.camera);
     }
     this.ui.hudUpdate(this.car, this.scheme, raw, this.score);
+    this.ui.raceUpdate(this.session, this.car, this.courseOpts);
     this.updatePerf(dt);
     this.ui.perfUpdate(this.perf, this.renderer);
     this.input.endFrame();
@@ -381,6 +472,7 @@ class Game {
       s.points = 0;
       s.flash = 1.4;
       s.flashText = 'WRECKED';
+      s.flashSub = '';
       s.flashBad = true;
       this.audio.say('Wrecked!');
       return;
@@ -401,6 +493,7 @@ class Game {
           s.flash = 1.6;
           s.flashBad = false;
           s.flashText = `+${Math.round(s.points).toLocaleString()}`;
+          s.flashSub = '';
           this.audio.say(s.points > 15000 ? 'Insane drift!' : s.points > 5000 ? 'Great drift!' : 'Nice drift!');
         }
       }
@@ -497,6 +590,10 @@ class Game {
     const hop = car.drift.hop > 0 ? Math.sin((car.drift.hop / 0.18) * Math.PI) : 0;
     const sh = 1 + hop * 0.8;
     r.sprite('carShadow', car.x + sun[0] * sh, car.y + sun[1] * sh, 5.2, 2.6, car.heading, [0, 0, 0, 0.6 - hop * 0.2]);
+    const [cw, ch] = REGIONS.car.size;
+    // the bot's run on this lap, see-through and without a shadow
+    const ghost = this.courseOpts.ghost && this.session?.ghost();
+    if (ghost && visible(ghost.x, ghost.y, 3)) r.sprite('car', ghost.x, ghost.y, cw, ch, ghost.heading, GHOST);
 
     // barriers & props
     for (const b of barriers) r.sprite(b.tint ? 'barrierB' : 'barrierA', b.x, b.y, b.hl * 2, b.hw * 2, b.rot);
@@ -514,7 +611,6 @@ class Game {
       const rot = car.heading + (i < 2 ? car.steerAngle : 0);
       r.sprite('wheel', wp[i][0], wp[i][1], 0.68 * scale, 0.27 * scale, rot);
     }
-    const [cw, ch] = REGIONS.car.size;
     r.sprite('car', car.x, car.y, cw * scale, ch * scale, car.heading);
 
     // brake lights

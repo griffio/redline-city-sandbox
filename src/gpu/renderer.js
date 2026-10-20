@@ -1,6 +1,7 @@
 // WebGPU renderer.
 //  pass 1 (persistent): skid-mark segments accumulate into a world-sized r8 texture
-//  pass 2: procedural ground (asphalt, paint, grass) sampling the skid texture
+//  pass 2: procedural ground (asphalt, paint, grass) sampling the skid texture, and in course mode
+//          the baked course texture (distance to the track, kerb stripes; see courses/groundmap.js)
 //  pass 3: one instanced draw for every sprite, all from the software-rendered atlas
 import { ATLAS_W, ATLAS_H, REGIONS } from '../sprites.js';
 import { WORLD } from '../physics/world.js';
@@ -10,6 +11,9 @@ const SKID_EXTENT = WORLD.half + 20; // metres from origin covered by the skid t
 const SPRITE_FLOATS = 16;
 const SKID_FLOATS = 8;
 const MAX_SKIDS = 8192;
+export const COURSE_RES = 1024; // course texture covers the same square as the skid texture
+export const COURSE_EXTENT = SKID_EXTENT;
+export const GROUND_MODE = { sandbox: 0, track: 1, guide: 2 };
 
 const COMMON = /* wgsl */ `
 struct Cam {
@@ -37,6 +41,17 @@ ${COMMON}
 // tileable mipmapped noise: R = fbm (big), G = fbm (mid/wear/grass), B = white grain, A = fbm (patches)
 @group(0) @binding(3) var noiseTex: texture_2d<f32>;
 @group(0) @binding(4) var noiseSamp: sampler;
+// course: R = distance to the centreline (m), G/B = cos/sin of the kerb stripe phase, A = kerb
+@group(0) @binding(5) var courseTex: texture_2d<f32>;
+struct Course {
+  mode: f32,      // 0 sandbox, 1 track with walls and grass, 2 open arena with a route guide
+  halfW: f32,     // half the track width
+  wall: f32,      // walls stand this far outside the painted edge
+  closed: f32,    // 1 = loop (one timing line), 0 = start and finish lines
+  start: vec4f,   // timing line: position xy, direction of travel zw
+  finish: vec4f,
+};
+@group(0) @binding(6) var<uniform> course: Course;
 
 const HALF: f32 = ${WORLD.half.toFixed(1)};
 const SKIDPAD = vec3f(${WORLD.skidpad.x.toFixed(1)}, ${WORLD.skidpad.y.toFixed(1)}, ${WORLD.skidpad.r.toFixed(1)});
@@ -56,6 +71,14 @@ struct VOut { @builtin(position) pos: vec4f, @location(0) ndc: vec2f };
 // anti-aliased line mask: distance d (m), half width w (m), pixel size px (m)
 fn line(d: f32, w: f32, px: f32) -> f32 { return 1.0 - smoothstep(w - px, w + px, abs(d)); }
 fn dashed(t: f32, period: f32, duty: f32) -> f32 { return step(fract(t / period), duty); }
+// 1 m chequers across a timing line: 0 or 1 inside it, -1 outside
+fn chequer(w: vec2f, l: vec4f, halfW: f32) -> f32 {
+  let p = w - l.xy;
+  let along = dot(p, l.zw);
+  let across = dot(p, vec2f(-l.w, l.z));
+  if (abs(along) > 1.0 || abs(across) > halfW) { return -1.0; }
+  return f32((i32(floor(along + 1.0)) + i32(floor(across + 64.0))) & 1);
+}
 
 @fragment fn fs(in: VOut) -> @location(0) vec4f {
   // reconstruct world position
@@ -87,60 +110,92 @@ fn dashed(t: f32, period: f32, duty: f32) -> f32 { return step(fract(t / period)
   // paint
   var paint = 0.0;
   var yellow = 0.0;
-  // grid every 10m, stronger every 50m
-  let g10 = min(line(fract(w.x / 10.0 + 0.5) * 10.0 - 5.0, 0.05, px), 1.0);
-  let g10y = line(fract(w.y / 10.0 + 0.5) * 10.0 - 5.0, 0.05, px);
-  paint = max(paint, max(g10, g10y) * 0.07);
-  let g50 = max(line(fract(w.x / 50.0 + 0.5) * 50.0 - 25.0, 0.09, px), line(fract(w.y / 50.0 + 0.5) * 50.0 - 25.0, 0.09, px));
-  paint = max(paint, g50 * 0.16);
-  // feature paint, each gated by a cheap bounds test so most pixels skip the atan2/ring maths
-  let dsp = length(w - SKIDPAD.xy);
-  if (abs(dsp - SKIDPAD.z - 4.0) < 5.0) {
-    // skidpad: two yellow rings + dashed centre line
-    yellow = max(yellow, line(dsp - SKIDPAD.z, 0.12, px));
-    yellow = max(yellow, line(dsp - SKIDPAD.z - 8.0, 0.12, px));
-    let ang = atan2(w.y - SKIDPAD.y, w.x - SKIDPAD.x);
-    paint = max(paint, line(dsp - SKIDPAD.z - 4.0, 0.08, px) * dashed(ang * (SKIDPAD.z + 4.0), 3.0, 0.5));
+  var kerb = 0.0;
+  var kerbCol = vec3f(0.0);
+  var offTrack = 0.0; // 1 = grass beyond a course's walls
+  let cm = textureSampleLevel(courseTex, skidSamp, suv, 0.0);
+  if (course.mode < 0.5 || course.mode > 1.5) {
+    // grid every 10m, stronger every 50m
+    let g10 = min(line(fract(w.x / 10.0 + 0.5) * 10.0 - 5.0, 0.05, px), 1.0);
+    let g10y = line(fract(w.y / 10.0 + 0.5) * 10.0 - 5.0, 0.05, px);
+    paint = max(paint, max(g10, g10y) * 0.07);
+    let g50 = max(line(fract(w.x / 50.0 + 0.5) * 50.0 - 25.0, 0.09, px), line(fract(w.y / 50.0 + 0.5) * 50.0 - 25.0, 0.09, px));
+    paint = max(paint, g50 * 0.16);
   }
-  if (abs(w.y - FIG8.y) < 11.0 && abs(w.x - FIG8.x) < FIG8.z + 11.0) {
-    // figure-8 rings around the two pylons
-    let d8a = length(w - FIG8.xy + vec2f(FIG8.z, 0.0));
-    let d8b = length(w - FIG8.xy - vec2f(FIG8.z, 0.0));
-    paint = max(paint, line(d8a - 10.0, 0.1, px) * dashed(atan2(w.y - FIG8.y, w.x - FIG8.x + FIG8.z) * 10.0, 2.0, 0.6));
-    paint = max(paint, line(d8b - 10.0, 0.1, px) * dashed(atan2(w.y - FIG8.y, w.x - FIG8.x - FIG8.z) * 10.0, 2.0, 0.6));
-  }
-  if (abs(w.y - DRAG.x) < 6.5 && w.x > DRAG.y && w.x < DRAG.z) {
-    // drag strip lanes + checkered start line
-    paint = max(paint, line(w.y - DRAG.x - 6.0, 0.12, px));
-    paint = max(paint, line(w.y - DRAG.x + 6.0, 0.12, px));
-    paint = max(paint, line(w.y - DRAG.x, 0.08, px) * dashed(w.x, 6.0, 0.5));
-    let sx = w.x - (DRAG.y + 6.0);
-    if (abs(sx) < 1.0 && abs(w.y - DRAG.x) < 6.0) {
-      let ch = (i32(floor(sx + 1.0)) + i32(floor(w.y))) & 1;
-      col = mix(col, select(vec3f(0.05), vec3f(0.85), ch == 0), 0.85);
+  if (course.mode < 0.5) {
+    // feature paint, each gated by a cheap bounds test so most pixels skip the atan2/ring maths
+    let dsp = length(w - SKIDPAD.xy);
+    if (abs(dsp - SKIDPAD.z - 4.0) < 5.0) {
+      // skidpad: two yellow rings + dashed centre line
+      yellow = max(yellow, line(dsp - SKIDPAD.z, 0.12, px));
+      yellow = max(yellow, line(dsp - SKIDPAD.z - 8.0, 0.12, px));
+      let ang = atan2(w.y - SKIDPAD.y, w.x - SKIDPAD.x);
+      paint = max(paint, line(dsp - SKIDPAD.z - 4.0, 0.08, px) * dashed(ang * (SKIDPAD.z + 4.0), 3.0, 0.5));
     }
-  }
-  if (abs(w.x) < 2.0 && abs(w.y) < 3.4) {
-    // start box at origin
-    let b = abs(w) - vec2f(1.6, 3.0);
+    if (abs(w.y - FIG8.y) < 11.0 && abs(w.x - FIG8.x) < FIG8.z + 11.0) {
+      // figure-8 rings around the two pylons
+      let d8a = length(w - FIG8.xy + vec2f(FIG8.z, 0.0));
+      let d8b = length(w - FIG8.xy - vec2f(FIG8.z, 0.0));
+      paint = max(paint, line(d8a - 10.0, 0.1, px) * dashed(atan2(w.y - FIG8.y, w.x - FIG8.x + FIG8.z) * 10.0, 2.0, 0.6));
+      paint = max(paint, line(d8b - 10.0, 0.1, px) * dashed(atan2(w.y - FIG8.y, w.x - FIG8.x - FIG8.z) * 10.0, 2.0, 0.6));
+    }
+    if (abs(w.y - DRAG.x) < 6.5 && w.x > DRAG.y && w.x < DRAG.z) {
+      // drag strip lanes + checkered start line
+      paint = max(paint, line(w.y - DRAG.x - 6.0, 0.12, px));
+      paint = max(paint, line(w.y - DRAG.x + 6.0, 0.12, px));
+      paint = max(paint, line(w.y - DRAG.x, 0.08, px) * dashed(w.x, 6.0, 0.5));
+      let sx = w.x - (DRAG.y + 6.0);
+      if (abs(sx) < 1.0 && abs(w.y - DRAG.x) < 6.0) {
+        let ch = (i32(floor(sx + 1.0)) + i32(floor(w.y))) & 1;
+        col = mix(col, select(vec3f(0.05), vec3f(0.85), ch == 0), 0.85);
+      }
+    }
+    if (abs(w.x) < 2.0 && abs(w.y) < 3.4) {
+      // start box at origin
+      let b = abs(w) - vec2f(1.6, 3.0);
+      paint = max(paint, line(max(b.x, b.y), 0.08, px));
+    }
+  } else if (course.mode < 1.5) {
+    // track: white edge lines, red/white kerbs on the corners, a darker run-off strip up to the
+    // walls, grass beyond them
+    let d = abs(cm.r);
+    let hw = course.halfW;
+    paint = max(paint, line(d - (hw - 0.3), 0.08, px));
+    kerb = (1.0 - smoothstep(hw + 0.15 - px, hw + 0.15 + px, d)) * smoothstep(hw - 1.05 - px, hw - 1.05 + px, d) * step(0.5, cm.a);
+    kerbCol = mix(vec3f(0.9, 0.9, 0.88), vec3f(0.76, 0.07, 0.08), step(0.0, cm.b));
+    col = mix(col, col * 0.8, smoothstep(hw - px, hw + px, d));
+    offTrack = smoothstep(hw + course.wall + 0.35, hw + course.wall + 0.6, d);
+    for (var k = 0; k < 2; k++) {
+      if (k == 1 && course.closed > 0.5) { break; }
+      let ch = chequer(w, select(course.start, course.finish, k == 1), hw);
+      if (ch >= 0.0) { col = mix(col, select(vec3f(0.05), vec3f(0.85), ch < 0.5), 0.85); }
+    }
+  } else {
+    // open arena: a faint dashed guide along the route and a start box
+    paint = max(paint, (1.0 - smoothstep(0.12 - px, 0.12 + px, abs(cm.r))) * step(0.0, cm.b) * 0.35);
+    let p = w - course.start.xy;
+    let b = abs(vec2f(dot(p, course.start.zw), dot(p, vec2f(-course.start.w, course.start.z)))) - vec2f(3.0, 1.6);
     paint = max(paint, line(max(b.x, b.y), 0.08, px));
   }
 
   let wear = 0.7 + 0.3 * wearN;
   col = mix(col, vec3f(0.82, 0.82, 0.8), paint * wear);
   col = mix(col, vec3f(0.86, 0.68, 0.12), yellow * wear * 0.9);
+  col = mix(col, kerbCol, kerb * (0.85 + 0.15 * wearN));
 
   // rubber
   col = mix(col, vec3f(0.025, 0.025, 0.028), clamp(skid, 0.0, 1.0) * 0.88);
 
+  var grass = vec3f(0.16, 0.24, 0.1) * (0.75 + 0.5 * grassN) + (grain - 0.5) * 0.04;
+  grass = mix(grass, vec3f(0.3, 0.26, 0.18), smoothstep(0.55, 0.7, dirtN) * 0.6);
+  col = mix(col, grass, offTrack);
+
   // outside the arena: kerb strip then scrubby grass
   let edge = max(abs(w.x), abs(w.y)) - HALF;
   if (edge > 0.45) {
-    var grass = vec3f(0.16, 0.24, 0.1) * (0.75 + 0.5 * grassN) + (grain - 0.5) * 0.04;
-    grass = mix(grass, vec3f(0.3, 0.26, 0.18), smoothstep(0.55, 0.7, dirtN) * 0.6);
-    let kerb = 1.0 - smoothstep(2.5, 2.6, edge);
+    let strip = 1.0 - smoothstep(2.5, 2.6, edge);
     let stripe = step(0.5, fract((w.x + w.y) / 3.0));
-    col = mix(grass, mix(vec3f(0.85), vec3f(0.75, 0.08, 0.08), stripe), kerb);
+    col = mix(grass, mix(vec3f(0.85), vec3f(0.75, 0.08, 0.08), stripe), strip);
   }
   return vec4f(col, 1.0);
 }
@@ -271,6 +326,14 @@ export class Renderer {
       alpha: { srcFactor: 'one', dstFactor: 'one-minus-src-alpha', operation: 'add' },
     };
 
+    // course texture + params (mode 0 = sandbox, so neither is read until a course loads)
+    this.courseTex = d.createTexture({
+      size: [COURSE_RES, COURSE_RES], format: 'rgba16float', usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST,
+    });
+    this.courseBuf = d.createBuffer({ size: 48, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
+    this.courseData = new Float32Array(12);
+    d.queue.writeBuffer(this.courseBuf, 0, this.courseData);
+
     // ground
     this.noiseTex = createNoiseTexture(d);
     this.repeat = d.createSampler({
@@ -291,6 +354,8 @@ export class Renderer {
         { binding: 2, resource: this.linear },
         { binding: 3, resource: this.noiseTex.createView() },
         { binding: 4, resource: this.repeat },
+        { binding: 5, resource: this.courseTex.createView() },
+        { binding: 6, resource: { buffer: this.courseBuf } },
       ],
     });
 
@@ -387,6 +452,23 @@ export class Renderer {
 
   clearSkids() {
     this.skidCleared = false;
+  }
+
+  /**
+   * Paint a course: `map` from bakeCourseMap(), plus how to draw it.
+   * @param p {mode, halfW, wall, closed, start: [x, y, dx, dy], finish: [x, y, dx, dy]}
+   */
+  setCourse(map, p) {
+    if (map) {
+      this.device.queue.writeTexture({ texture: this.courseTex }, map, { bytesPerRow: COURSE_RES * 8 }, [COURSE_RES, COURSE_RES]);
+    }
+    const D = this.courseData;
+    D.set([p.mode, p.halfW ?? 0, p.wall ?? 0, p.closed ? 1 : 0, ...(p.start ?? [0, 0, 1, 0]), ...(p.finish ?? [0, 0, 1, 0])]);
+    this.device.queue.writeBuffer(this.courseBuf, 0, D);
+  }
+
+  clearCourse() {
+    this.setCourse(null, { mode: GROUND_MODE.sandbox });
   }
 
   /** @param scale fraction of native (devicePixelRatio, capped at 2) resolution to render at */

@@ -6,6 +6,8 @@ import { INPUT_TUNING } from './input.js';
 import { CAR_COLORS, DECAL_PRESETS } from './sprites.js';
 import { aiAvailable } from './api.js';
 import { TOUCH_TUNING } from './touch.js';
+import { KINDS } from './courses/generate.js';
+import { formatTime, MEDALS } from './courses/session.js';
 
 const $ = (sel, root = document) => root.querySelector(sel);
 const h = (tag, attrs = {}, ...kids) => {
@@ -87,6 +89,7 @@ const CAMERA_SLIDERS = [
   ['carScreenY', 'Car below centre (rotating)', 0, 0.35, 0.01],
   ['shake', 'Impact shake', 0, 2, 0.05],
 ];
+const MEDAL_COLORS = { gold: '#e8c35a', silver: '#c3c9d1', bronze: '#c47f45' };
 
 export class UI {
   constructor(game) {
@@ -109,10 +112,17 @@ export class UI {
       <div class="stat scheme-name"></div>
       <div class="turbo"></div>`;
     const q = (sel) => this.hud.querySelector(sel);
+    const race = $('#race');
+    race.innerHTML = '<div class="rtime"></div><div class="rinfo"></div><div class="rdelta"></div>';
+    const note = $('#pacenote');
+    note.innerHTML = '<b></b><span></span><small></small>';
     this.el = {
       speed: q('.speed b'), gear: q('.gear'), rpm: q('.rpm i'), drift: q('.stat b'), scheme: q('.scheme-name'),
-      turbo: q('.turbo'), best: $('#best'), perf: $('#perf'),
+      turbo: q('.turbo'), best: $('#best'), perf: $('#perf'), sub: $('#title .sub'),
+      rtime: race.querySelector('.rtime'), rinfo: race.querySelector('.rinfo'), rdelta: race.querySelector('.rdelta'),
+      note, noteCall: note.querySelector('b'), noteLink: note.querySelector('span'), noteThen: note.querySelector('small'),
     };
+    this.map = $('#minimap');
     this.last = {};
   }
 
@@ -126,6 +136,8 @@ export class UI {
     const g = this.game;
     const p = this.panel;
     p.innerHTML = '';
+
+    p.append(h('h2', {}, 'Track'), this.courseSection());
 
     // schemes
     const schemes = h('div', { class: 'schemes' });
@@ -289,12 +301,147 @@ export class UI {
     if (showBanner) {
       const html = score.active
         ? `<b>${Math.round(score.points).toLocaleString()}</b><span>×${score.mult.toFixed(1)} DRIFT</span>`
-        : `<b class="${score.flashBad ? 'bad' : ''}">${score.flashText}</b>`;
+        : `<b class="${score.flashBad ? 'bad' : ''}">${score.flashText}</b>${score.flashSub ? `<span>${score.flashSub}</span>` : ''}`;
       this.set('banner', html, (v) => { this.banner.innerHTML = v; });
     }
     this.set('best', Math.round(score.best) * 1e9 + Math.round(score.total), () => {
       E.best.textContent = `best drift ${Math.round(score.best).toLocaleString()} · total ${Math.round(score.total).toLocaleString()}`;
     });
+  }
+
+  /** Track picker: sandbox or a generated track from a seed, plus the medal times once one is loaded. */
+  courseSection() {
+    const g = this.game;
+    const kind = g.course?.kind ?? 'sandbox';
+    const target = () => (kind === 'sandbox' ? 'circuit' : kind);
+    const seed = h('input', { type: 'text', placeholder: 'any word or number', spellcheck: 'false', autocomplete: 'off' });
+    seed.value = g.course?.seed ?? '';
+    seed.addEventListener('keydown', (e) => { if (e.key === 'Enter') g.loadCourse(target(), seed.value); });
+    const kindSel = h('select', {
+      onchange: (e) => (e.target.value === 'sandbox' ? g.loadSandbox() : g.loadCourse(e.target.value, seed.value)),
+    }, [['sandbox', 'Handling sandbox'], ...Object.entries(KINDS).map(([k, v]) => [k, v.name])].map(([k, v]) =>
+      h('option', { value: k, ...(kind === k ? { selected: '' } : {}) }, v)));
+    const wrap = h('div', { class: 'course' },
+      h('div', { class: 'row2' }, h('label', {}, 'Track', kindSel), h('label', {}, 'Seed', seed)),
+      h('div', { class: 'btns' },
+        h('button', { onclick: () => g.loadCourse(target(), seed.value) }, 'Load seed'),
+        h('button', { onclick: () => g.loadCourse(target()) }, 'New track (N)'),
+      ),
+    );
+    const s = g.session, c = g.course?.data;
+    if (!s) {
+      wrap.append(h('p', { class: 'hint' }, 'Generate a circuit, a rally stage or a gymkhana from any seed. The same seed always makes the same track, so you can share it.'));
+      return wrap;
+    }
+    const size = c.kind === 'gymkhana' ? `${c.elements.length} elements, ${c.cones.length} cones` : `${c.corners.length} corners`;
+    const what = c.closed ? 'best lap' : c.kind === 'gymkhana' ? 'time incl. 2 s per cone down' : 'stage time';
+    wrap.append(
+      h('p', { class: 'hint' }, `${(c.length / 1000).toFixed(2)} km · ${size}. Medals are for your ${what}; silver is the bot's time with this car.`),
+      h('div', { class: 'medals' }, MEDALS.map((m) => h('span', {}, h('i', { style: `background:${MEDAL_COLORS[m]}` }), `${m[0].toUpperCase() + m.slice(1)} ${formatTime(s.targets[m])}`))),
+      h('p', { class: 'hint' }, s.best ? `Your best: ${formatTime(s.best.time)}${s.best.medal ? ` (${s.best.medal})` : ''}` : 'No time set on this track yet.'),
+      h('div', { class: 'checks' },
+        this.check('Bot ghost', g.courseOpts.ghost, (v) => { g.courseOpts.ghost = v; }),
+        this.check('Pace notes', g.courseOpts.notes, (v) => { g.courseOpts.notes = v; }),
+        this.check('Minimap', g.courseOpts.map, (v) => { g.courseOpts.map = v; }),
+      ),
+    );
+    return wrap;
+  }
+
+  /** Draw the track once into an offscreen canvas for the minimap (null = sandbox). */
+  setCourse(course) {
+    this.mapCourse = course;
+    if (!course) return;
+    const dpr = Math.min(devicePixelRatio || 1, 2);
+    const size = Math.round(170 * dpr);
+    this.map.width = this.map.height = size;
+    const pts = course.center;
+    let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity;
+    for (const [x, y] of pts) { x0 = Math.min(x0, x); x1 = Math.max(x1, x); y0 = Math.min(y0, y); y1 = Math.max(y1, y); }
+    const k = (size * 0.86) / Math.max(x1 - x0, y1 - y0);
+    const cx = (x0 + x1) / 2, cy = (y0 + y1) / 2;
+    this.mapTo = (x, y) => [size / 2 + (x - cx) * k, size / 2 - (y - cy) * k];
+    const bg = (this.mapBg = document.createElement('canvas'));
+    bg.width = bg.height = size;
+    const c = bg.getContext('2d');
+    c.fillStyle = 'rgba(10, 12, 15, 0.72)';
+    c.beginPath(); c.roundRect(0, 0, size, size, 12 * dpr); c.fill();
+    c.lineJoin = c.lineCap = 'round';
+    const path = () => {
+      c.beginPath();
+      pts.forEach(([x, y], i) => (i ? c.lineTo(...this.mapTo(x, y)) : c.moveTo(...this.mapTo(x, y))));
+      if (course.closed) c.closePath();
+    };
+    if (course.kind === 'gymkhana') {
+      c.setLineDash([3 * dpr, 3 * dpr]);
+      c.strokeStyle = 'rgba(230, 232, 235, 0.45)'; c.lineWidth = 1.5 * dpr; path(); c.stroke();
+      c.setLineDash([]);
+      c.fillStyle = '#ff7a1a';
+      for (const [x, y] of course.cones) { const [px, py] = this.mapTo(x, y); c.fillRect(px - dpr, py - dpr, 2 * dpr, 2 * dpr); }
+    } else {
+      c.strokeStyle = 'rgba(230, 232, 235, 0.85)'; c.lineWidth = Math.max(3 * dpr, course.width * k); path(); c.stroke();
+      c.strokeStyle = '#2b2f36'; c.lineWidth = Math.max(1.5 * dpr, course.width * k - 2 * dpr); path(); c.stroke();
+    }
+    // start (and finish) markers
+    for (const p of course.closed ? [pts[0]] : [pts[0], pts[pts.length - 1]]) {
+      const [px, py] = this.mapTo(...p);
+      c.fillStyle = '#fff'; c.fillRect(px - 3 * dpr, py - 3 * dpr, 6 * dpr, 6 * dpr);
+    }
+  }
+
+  drawMinimap(car, ghost) {
+    const c = this.map.getContext('2d');
+    const size = this.map.width, dpr = size / 170;
+    c.clearRect(0, 0, size, size);
+    c.drawImage(this.mapBg, 0, 0);
+    if (ghost) {
+      const [gx, gy] = this.mapTo(ghost.x, ghost.y);
+      c.fillStyle = 'rgba(190, 215, 255, 0.85)';
+      c.beginPath(); c.arc(gx, gy, 3.2 * dpr, 0, Math.PI * 2); c.fill();
+    }
+    const [px, py] = this.mapTo(car.x, car.y);
+    c.save();
+    c.translate(px, py); c.rotate(-car.heading);
+    c.fillStyle = '#ff2b3a'; c.strokeStyle = '#fff'; c.lineWidth = 1.2 * dpr;
+    c.beginPath(); c.moveTo(6 * dpr, 0); c.lineTo(-4 * dpr, 4 * dpr); c.lineTo(-4 * dpr, -4 * dpr); c.closePath(); c.fill(); c.stroke();
+    c.restore();
+  }
+
+  /** Lap timer, gap to the bot, pace note, minimap. Called every frame; DOM writes only on change. */
+  raceUpdate(s, car, opts) {
+    const E = this.el;
+    this.set('raceOn', !!s, (v) => document.body.classList.toggle('course-mode', v));
+    this.set('mapOn', !!s && opts.map, (v) => document.body.classList.toggle('map-on', v));
+    if (!s) {
+      this.set('sub', 'handling sandbox', (v) => { E.sub.textContent = v; });
+      return;
+    }
+    const c = s.c, g = this.game;
+    this.set('sub', `${KINDS[c.kind].name} · seed ${g.course.seed}`, (v) => { E.sub.textContent = v; });
+    this.set('rtime', formatTime(s.lapTime), (v) => { E.rtime.textContent = v; });
+    const best = s.best ? ` · BEST ${formatTime(s.best.time)}` : '';
+    let info;
+    if (s.state === 'ready') info = `DRIVE OFF TO START THE CLOCK${best}`;
+    else if (c.closed) info = `LAP ${s.lap}${s.lastLap != null ? ` · LAST ${formatTime(s.lastLap)}` : ''}${best}`;
+    else if (c.kind === 'gymkhana') info = `CONES DOWN ${s.cones}${s.cones ? ` (+${s.cones * 2} s)` : ''}${best}`;
+    else info = `STAGE${best}`;
+    if (s.state === 'finished') info = `${s.result.medal ? s.result.medal.toUpperCase() : 'FINISHED'} · R TO GO AGAIN · N NEW TRACK`;
+    this.set('rinfo', info, (v) => { E.rinfo.textContent = v; });
+    const d = s.state === 'running' && opts.ghost ? s.delta : null;
+    const dText = d == null ? '' : `${d > 0 ? '+' : '−'}${Math.abs(d).toFixed(2)} vs bot`;
+    this.set('rdelta', dText, (v) => {
+      E.rdelta.textContent = v;
+      E.rdelta.className = `rdelta ${d > 0 ? 'behind' : 'ahead'}`;
+    });
+    const note = opts.notes && s.state !== 'finished' ? s.noteAhead(car.speed) : null;
+    this.set('note', note ? `${note.call}|${note.link}|${note.then}` : '', () => {
+      E.note.classList.toggle('on', !!note);
+      if (!note) return;
+      E.noteCall.textContent = note.call;
+      E.noteLink.textContent = note.link;
+      E.noteThen.textContent = note.then ? `then ${note.then}` : '';
+    });
+    if (opts.map && this.mapBg) this.drawMinimap(car, opts.ghost ? s.ghost() : null);
   }
 
   perfUpdate(perf, renderer) {

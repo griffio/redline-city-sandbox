@@ -1,6 +1,6 @@
 # Redline City: handling sandbox
 
-Top-down arcade driving in WebGPU. This first milestone is a 400 m × 400 m test pad (skidpad, figure-8, slalom, drag strip, barrier blocks, cones and tyre stacks) for dialling in car feel. It plays with a keyboard, a game controller, or an iPad's tilt sensor.
+Top-down arcade driving in WebGPU. This first milestone is a 400 m × 400 m test pad (skidpad, figure-8, slalom, drag strip, barrier blocks, cones and tyre stacks) for dialling in car feel. It can also generate tracks from any seed (circuits, rally stages and gymkhanas) with lap timing, medals and a bot's ghost to race. It plays with a keyboard, a game controller, or an iPad's tilt sensor.
 
 **▶ Play: https://redline-city.griffio-work.workers.dev**. It needs a WebGPU browser: Chrome/Edge 113+, Safari 26+ (including iPad), or Firefox 141+.
 
@@ -15,6 +15,7 @@ Top-down arcade driving in WebGPU. This first milestone is a 400 m × 400 m test
 
 - [Running it](#running-it)
 - [Controls](#controls)
+- [Generated tracks](#generated-tracks)
 - [Control schemes and handling](#control-schemes-and-handling)
 - [Physics and assists](#physics-and-assists)
 - [iPad and tablets](#ipad-and-tablets)
@@ -85,7 +86,8 @@ npm run dev:cf       # run the same Worker locally; the AI binding still runs on
 | Handbrake | `Space` | A | Button above the brake |
 | Drift (scheme 4) | `Shift` | B / RB | Button above the gas |
 | Brake (point-to-steer) | `X` / `Ctrl` | X | Left pedal |
-| Reset car | `R` | Y / D-pad ↑ | ↺ |
+| Reset car (on a track: restart the run) | `R` | Y / D-pad ↑ | ↺ |
+| New track | `N` | D-pad ↓ | Settings → Track |
 | Control scheme | `1`–`5` | View | Settings |
 | Camera | `C` | LB | Settings |
 | Handling preset | `P` | D-pad ◀ ▶ | Settings |
@@ -95,6 +97,32 @@ npm run dev:cf       # run the same Worker locally; the AI binding still runs on
 * **Rumble:** controllers rumble on tyre slip, lockups and impacts. The rumble stays silent while the tyres grip.
 * **Analog sticks:** they use a radial dead zone and a response curve.
 * **Keyboard steering:** it ramps in, and returns faster when you let go.
+
+## Generated tracks
+
+Panel → *Track*: pick **Circuit**, **Rally stage** or **Gymkhana** and type a seed (any word or number), or press `N` for a random one. The same seed always gives the same track, so a seed can be shared. *Handling sandbox* goes back to the test pad.
+
+* **Circuit:** a flowing closed loop of 0.9–2 km, 12 m wide, with walls and red/white kerbs on the corners tighter than 45 m. You drive laps, and the best one counts.
+* **Rally stage:** point-to-point, 9 m wide and more technical, with hairpins and square corners from a walk on a 40 m grid. You race the clock to the finish line.
+* **Gymkhana:** the open arena with a dashed guide, over 4×4 cells of 90 m:
+  * straight cells hold slaloms or gate chicanes;
+  * turning cells hold 450° loops round a tyre stack, or cone boxes;
+  * the run ends when you stop in the cone garage;
+  * each cone you knock down adds 2 s.
+* **Timing:** the clock starts when the car moves. Checkpoints every 20 m must be passed in order. Lap and finish times are interpolated to the moment you cross the line. `R` starts the run again.
+* **Medals and the bot:**
+  * **The bot:** when a track loads, a bot drives it headless with your current car. It uses the same `Car` and `World` code at 240 Hz and takes about 0.2–0.3 s.
+  * **Gold:** within 5% of the lap simulation's limit.
+  * **Silver:** beat the bot's time.
+  * **Bronze:** within 15% of the bot.
+  * **Recalculation:** medals are worked out again when you change the handling preset. Circuits are judged on your best lap against the bot's flying lap.
+* **Ghost and gap:** the see-through car is the bot's run on the same lap. Under the timer, the gap to it updates as you drive (`−0.42 vs bot`).
+* **Pace notes:** the next corner is called on screen about 3.5 s ahead: direction, grade 1–6 / Hairpin / Square, `tightens` or `opens`, then the distance or `into`. On a gymkhana it names the next element.
+* **Minimap:** top right, with your car and the ghost. The ghost, pace notes and minimap can each be turned off in the panel.
+* **Best times:** kept per track in localStorage, and the last track you drove loads again next time.
+* **How a track is drawn:**
+  * **Walls:** segments fed to `addWall()`.
+  * **Ground:** the ground shader reads a baked 1024² `rgba16float` course texture (`src/courses/groundmap.js`). It holds the distance to the centreline, the kerb-stripe phase and the kerb sides. A distance field filters cleanly, so the edges stay sharp at any zoom.
 
 ## Control schemes and handling
 
@@ -205,12 +233,17 @@ Profiled on the dev machine's Intel UHD 630 at full Retina resolution (3080×216
 |---|---|
 | `src/main.js` | Game loop, settings persistence, skid marks, particles, drift scoring |
 | `src/physics/car.js` | Vehicle model + tuning presets |
-| `src/physics/world.js` | Sandbox layout, SAT car-vs-barrier, impulse collisions with cones and tyres |
+| `src/physics/world.js` | Sandbox layout or a generated track's walls and props, SAT car-vs-barrier, impulse collisions with cones and tyres |
+| `src/courses/generate.js` | Seeded circuit, rally-stage and gymkhana generators; racing line, corners, pace notes, kerbs, walls |
+| `src/courses/lapsim.js` | Lap simulation (grip-circle corner speeds, the car's torque curve, gears and brakes): par times and the bot's speed targets |
+| `src/courses/bot.js` | The bot driver (pure pursuit on the racing line) and the headless run behind medals, the ghost and split times |
+| `src/courses/session.js` | Track timing: checkpoints, laps and finishes, cone penalties, medals, best times, ghost, pace note ahead |
+| `src/courses/groundmap.js` | Bakes a track into the ground shader's course texture |
 | `src/controls.js` | The 5 control schemes (input → car commands) |
 | `src/input.js` | Keyboard ramps, radial dead zone + response curve, Gamepad API, dual-motor rumble |
 | `src/touch.js` | Tablet controls: tilt steering, touch pedals, full-tilt and jerk-handbrake modes |
 | `src/camera.js` | Chase / locked / north-up camera, look-ahead, speed zoom, shake |
-| `src/gpu/renderer.js` | WebGPU: procedural ground shader, persistent skid-mark render target, instanced sprites |
+| `src/gpu/renderer.js` | WebGPU: procedural ground shader (sandbox paint or a baked track), persistent skid-mark render target, instanced sprites |
 | `src/sprites.js` | Canvas 2D (software) sprite atlas, decal presets, AI detail pipeline |
 | `src/audio.js` | Sample-based V8 engine + tyres, synth fallback, announcer callouts |
 | `src/ui.js` | Tuning panel, HUD, telemetry widget |

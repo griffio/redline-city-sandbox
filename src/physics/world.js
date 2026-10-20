@@ -1,4 +1,4 @@
-// Sandbox layout + collision response.
+// Sandbox layout (or a generated course's walls and props) + collision response.
 // Static barriers are oriented boxes; cones and tyre stacks are light dynamic circles.
 
 export const WORLD = {
@@ -42,12 +42,17 @@ export class World {
     this.props.push({ kind: 'tyres', x, y, vx: 0, vy: 0, r: 0.75, mass: 90, rot: Math.random() * 6, spin: 0, down: false, home: [x, y] });
   }
 
-  build() {
+  addArena() {
     const H = WORLD.half;
     this.addWall(-H, -H, H, -H);
     this.addWall(H, -H, H, H);
     this.addWall(H, H, -H, H);
     this.addWall(-H, H, -H, -H);
+  }
+
+  build() {
+    const H = WORLD.half;
+    this.addArena();
 
     // skidpad: ring of cones on the outer line
     const sp = WORLD.skidpad;
@@ -88,6 +93,22 @@ export class World {
     // tyre walls in corners
     for (let i = 0; i < 6; i++) this.addTyres(-H + 6 + i * 1.6, H - 6);
     for (let i = 0; i < 6; i++) this.addTyres(H - 6, -H + 6 + i * 1.6);
+  }
+
+  /** Swap the sandbox layout for a generated course: its walls (segments), cones and tyre stacks. */
+  loadCourse({ walls = [], cones = [], tyres = [] }) {
+    this.barriers = [];
+    this.props = [];
+    this.addArena();
+    for (const seg of walls) this.addWall(...seg);
+    for (const [x, y] of cones) this.addCone(x, y);
+    for (const [x, y] of tyres) this.addTyres(x, y);
+  }
+
+  loadSandbox() {
+    this.barriers = [];
+    this.props = [];
+    this.build();
   }
 
   resetProps() {
