@@ -24,6 +24,19 @@ export function seedFrom(text) {
   return h >>> 0;
 }
 
+/**
+ * Seeded Fisher–Yates shuffle. (sort() with a random comparator is not the same thing: how often
+ * and in what order it calls the comparator differs between JS engines, so tracks would too.)
+ */
+function shuffled(arr, R) {
+  const a = arr.slice();
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(R() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+
 // ------------------------------------------------------------------ geometry
 const at = (arr, i, closed) => (closed ? arr[((i % arr.length) + arr.length) % arr.length] : arr[clamp(i, 0, arr.length - 1)]);
 
@@ -236,7 +249,7 @@ export function genStage(seed) {
       if (--budget < 0) return false;
       const [cx, cy] = path.at(-1);
       // prefer going straight on, which makes straights; otherwise random turns
-      const order = dirs.slice().sort(() => R() - 0.5);
+      const order = shuffled(dirs, R);
       if (dir && R() < 0.42) order.unshift(dir);
       for (const d of order) {
         const nx = cx + d[0], ny = cy + d[1];
@@ -288,7 +301,7 @@ export function genGymkhana(seed) {
       if (path.length >= target) return true;
       if (--budget < 0) return false;
       const [cx, cy] = path.at(-1);
-      for (const d of dirs.slice().sort(() => R() - 0.5)) {
+      for (const d of shuffled(dirs, R)) {
         const nx = cx + d[0], ny = cy + d[1];
         if (nx < 0 || ny < 0 || nx >= N || ny >= N || used.has(`${nx},${ny}`)) continue;
         path.push([nx, ny]); used.add(`${nx},${ny}`);
